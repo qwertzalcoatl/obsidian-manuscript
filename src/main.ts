@@ -61,7 +61,10 @@ export class SheetNavigatorView extends ItemView {
   listEl!: HTMLElement;
   exportBtnEl: HTMLElement | null = null;
   selectedPaths: Set<string> = new Set();
-  isSelectionMode: boolean = false;
+
+  get isSelectionMode(): boolean {
+    return this.selectedPaths.size > 0;
+  }
 
   constructor(leaf: WorkspaceLeaf, plugin: SheetNavigatorPlugin) {
     super(leaf);
@@ -451,25 +454,15 @@ export class SheetNavigatorView extends ItemView {
     const chevron = card.createDiv({ cls: "sheet-nav-chevron" });
     chevron.setText("›");
 
-    // Card-level: handles selection anywhere on the card (number, padding, content)
-    // Shift-click enters selection mode if not already in it
+    // Shift-click: toggle selection; regular click: drill in (clears selection via drillInto)
     card.addEventListener("click", (e: MouseEvent) => {
       if (e.shiftKey) {
-        this.isSelectionMode
-          ? this.selectRange(folder.path)
-          : this.enterSelectionMode(folder.path);
+        this.toggleSelection(folder.path);
         return;
       }
-      if (!this.isSelectionMode) return;
-      this.toggleSelection(folder.path);
-    });
-    // Content-level: handles navigation when not in selection mode
-    content.addEventListener("click", () => {
-      if (this.isSelectionMode) return; // card-level handles it
       this.drillInto(folder);
     });
     chevron.addEventListener("click", (e: MouseEvent) => {
-      // Chevron always drills in — stopPropagation prevents card-level selection handler
       e.stopPropagation();
       this.drillInto(folder);
     });
@@ -521,21 +514,16 @@ export class SheetNavigatorView extends ItemView {
       // File might not be readable
     }
 
-    // Card-level: handles selection anywhere on the card
-    // Shift-click enters selection mode if not already in it
+    // Shift-click: toggle selection; regular click: single-select this file + open it
     card.addEventListener("click", (e: MouseEvent) => {
       if (e.shiftKey) {
-        this.isSelectionMode
-          ? this.selectRange(file.path)
-          : this.enterSelectionMode(file.path);
+        this.toggleSelection(file.path);
         return;
       }
-      if (!this.isSelectionMode) return;
-      this.toggleSelection(file.path);
-    });
-    // Content-level: opens note when not in selection mode
-    content.addEventListener("click", () => {
-      if (this.isSelectionMode) return;
+      // Single-select: replace any existing selection with just this file
+      this.selectedPaths.clear();
+      this.selectedPaths.add(file.path);
+      this.updateSelectionUI();
       this.app.workspace.openLinkText(file.path, "", false);
     });
 
@@ -651,42 +639,6 @@ export class SheetNavigatorView extends ItemView {
         });
     });
 
-    if (Platform.isDesktop && this.plugin.settings.latexExportEnabled) {
-      menu.addSeparator();
-      menu.addItem(item => {
-        item
-          .setTitle('Export as PDF')
-          .setIcon('download')
-          .onClick(() => {
-            new ExportModal(
-              this.app,
-              this.plugin,
-              this,
-              new Set([abstractFile.path])
-            ).open();
-          });
-      });
-      menu.addItem(item => {
-        item
-          .setTitle(
-            this.selectedPaths.has(abstractFile.path)
-              ? 'Deselect'
-              : 'Select for export'
-          )
-          .setIcon('check-square')
-          .onClick(() => {
-            if (this.selectedPaths.has(abstractFile.path)) {
-              this.toggleSelection(abstractFile.path);
-            } else {
-              if (!this.isSelectionMode) {
-                this.enterSelectionMode(abstractFile.path);
-              } else {
-                this.toggleSelection(abstractFile.path);
-              }
-            }
-          });
-      });
-    }
 
     menu.showAtMouseEvent(e);
   }
@@ -747,13 +699,11 @@ export class SheetNavigatorView extends ItemView {
   // ─── Selection ───────────────────────────────────────────────────────────
 
   enterSelectionMode(absPath: string): void {
-    this.isSelectionMode = true;
     this.selectedPaths.add(absPath);
     this.updateSelectionUI();
   }
 
   exitSelectionMode(): void {
-    this.isSelectionMode = false;
     this.selectedPaths.clear();
     this.updateSelectionUI();
   }
@@ -761,12 +711,8 @@ export class SheetNavigatorView extends ItemView {
   toggleSelection(absPath: string): void {
     if (this.selectedPaths.has(absPath)) {
       this.selectedPaths.delete(absPath);
-      if (this.selectedPaths.size === 0) {
-        this.isSelectionMode = false;
-      }
     } else {
       this.selectedPaths.add(absPath);
-      this.isSelectionMode = true;
     }
     this.updateSelectionUI();
   }
@@ -774,7 +720,6 @@ export class SheetNavigatorView extends ItemView {
   selectRange(targetPath: string): void {
     if (this.selectedPaths.size === 0) {
       this.selectedPaths.add(targetPath);
-      this.isSelectionMode = true;
       this.updateSelectionUI();
       return;
     }
@@ -800,7 +745,6 @@ export class SheetNavigatorView extends ItemView {
       }
     }
 
-    this.isSelectionMode = true;
     this.updateSelectionUI();
   }
 
