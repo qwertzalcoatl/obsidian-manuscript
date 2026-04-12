@@ -461,9 +461,8 @@ class SheetNavigatorView extends ItemView {
       this.drillInto(folder);
     });
     chevron.addEventListener("click", (e: MouseEvent) => {
-      // Chevron always drills in — explicit navigation intent
+      // Chevron always drills in, even in selection mode — it's an explicit navigation intent
       e.stopPropagation();
-      if (this.isSelectionMode) this.exitSelectionMode();
       this.drillInto(folder);
     });
     card.addEventListener("contextmenu", (e) =>
@@ -735,11 +734,12 @@ class SheetNavigatorView extends ItemView {
   toggleSelection(absPath: string): void {
     if (this.selectedPaths.has(absPath)) {
       this.selectedPaths.delete(absPath);
+      if (this.selectedPaths.size === 0) {
+        this.isSelectionMode = false;
+      }
     } else {
       this.selectedPaths.add(absPath);
-    }
-    if (this.selectedPaths.size === 0) {
-      this.isSelectionMode = false;
+      this.isSelectionMode = true;
     }
     this.updateSelectionUI();
   }
@@ -747,6 +747,7 @@ class SheetNavigatorView extends ItemView {
   selectRange(targetPath: string): void {
     if (this.selectedPaths.size === 0) {
       this.selectedPaths.add(targetPath);
+      this.isSelectionMode = true;
       this.updateSelectionUI();
       return;
     }
@@ -772,6 +773,7 @@ class SheetNavigatorView extends ItemView {
       }
     }
 
+    this.isSelectionMode = true;
     this.updateSelectionUI();
   }
 
