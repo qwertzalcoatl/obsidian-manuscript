@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -122,7 +122,7 @@ export function generateLatex(files: FileContent[], template: ExportTemplate): s
 
 export function checkPdflatex(pdflatexPath: string): boolean {
   try {
-    execSync(`"${pdflatexPath}" --version`, { stdio: 'pipe' });
+    execFileSync(pdflatexPath, ['--version'], { stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -142,12 +142,15 @@ export function compilePdf(texContent: string, pdflatexPath: string): CompileRes
   try {
     fs.writeFileSync(texPath, texContent, 'utf-8');
 
-    // Quote paths to handle spaces on all platforms (macOS, Windows, Linux)
-    const cmd = `"${pdflatexPath}" -interaction=nonstopmode -output-directory="${tmpDir}" "${texPath}"`;
+    const args = [
+      '-interaction=nonstopmode',
+      `-output-directory=${tmpDir}`,
+      texPath,
+    ];
 
-    // Two passes: first builds the PDF, second resolves page numbers / cross-refs
-    execSync(cmd, { stdio: 'pipe', cwd: tmpDir });
-    execSync(cmd, { stdio: 'pipe', cwd: tmpDir });
+    // Two passes: first builds the PDF, second resolves any cross-references
+    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir });
+    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir });
 
     if (!fs.existsSync(pdfPath)) {
       throw new Error('pdflatex ran but produced no PDF. Check your LaTeX installation.');
