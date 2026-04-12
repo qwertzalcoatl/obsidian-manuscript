@@ -625,6 +625,7 @@ class SheetNavigatorView extends ItemView {
   }
 
   drillInto(folder: TFolder): void {
+    if (this.isSelectionMode) this.exitSelectionMode();
     this.history.push({
       path: this.currentPath,
       name: this.getFolderByPath(this.currentPath).name || "Vault",
@@ -634,6 +635,7 @@ class SheetNavigatorView extends ItemView {
   }
 
   goUp(): void {
+    if (this.isSelectionMode) this.exitSelectionMode();
     if (this.history.length > 0) {
       const prev = this.history.pop()!;
       this.currentPath = prev.path;
