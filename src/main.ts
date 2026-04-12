@@ -615,6 +615,30 @@ class SheetNavigatorView extends ItemView {
         });
     });
 
+    if (Platform.isDesktop && this.plugin.settings.latexExportEnabled) {
+      menu.addSeparator();
+      menu.addItem(item => {
+        item
+          .setTitle(
+            this.selectedPaths.has(abstractFile.path)
+              ? 'Deselect'
+              : 'Select for export'
+          )
+          .setIcon('check-square')
+          .onClick(() => {
+            if (this.selectedPaths.has(abstractFile.path)) {
+              this.toggleSelection(abstractFile.path);
+            } else {
+              if (!this.isSelectionMode) {
+                this.enterSelectionMode(abstractFile.path);
+              } else {
+                this.toggleSelection(abstractFile.path);
+              }
+            }
+          });
+      });
+    }
+
     menu.showAtMouseEvent(e);
   }
 
