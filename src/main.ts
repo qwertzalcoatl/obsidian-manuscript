@@ -12,6 +12,7 @@ import {
   App,
   FileSystemAdapter,
   Notice,
+  Platform,
 } from "obsidian";
 
 const VIEW_TYPE = "sheet-navigator-view";
@@ -19,10 +20,14 @@ const PREVIEW_LENGTH = 120;
 
 interface SheetNavigatorSettings {
   orderingEnabled: boolean;
+  latexExportEnabled: boolean;
+  pdflatexPath: string;
 }
 
 const DEFAULT_SETTINGS: SheetNavigatorSettings = {
   orderingEnabled: false,
+  latexExportEnabled: false,
+  pdflatexPath: 'pdflatex',
 };
 
 interface ParsedName {
