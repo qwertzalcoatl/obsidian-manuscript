@@ -1,0 +1,307 @@
+/* Sheet Navigator — Ulysses-style sidebar */
+
+.sheet-navigator {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Header */
+.sheet-nav-header {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.sheet-nav-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--text-accent);
+  font-size: 13px;
+  margin-bottom: 4px;
+  padding: 2px 0;
+}
+
+.sheet-nav-back:hover {
+  color: var(--text-accent-hover);
+}
+
+.sheet-nav-back-arrow {
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 300;
+}
+
+.sheet-nav-back-label {
+  opacity: 0.9;
+}
+
+.sheet-nav-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-normal);
+  line-height: 1.3;
+}
+
+/* Scrollable list */
+.sheet-nav-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 20px;
+}
+
+/* ─── Cards — shared ─── */
+.sheet-nav-card {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+
+.sheet-nav-card:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* Active note highlight */
+.sheet-nav-card.is-active {
+  background-color: var(--background-modifier-active-hover, var(--interactive-accent));
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.sheet-nav-card.is-active .sheet-nav-card-title {
+  color: var(--text-on-accent, var(--text-normal));
+  font-weight: 700;
+}
+
+/* Drag handle */
+.sheet-nav-drag-handle {
+  flex-shrink: 0;
+  width: 16px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  padding-top: 2px;
+  user-select: none;
+  text-align: center;
+}
+
+.sheet-nav-card:hover .sheet-nav-drag-handle {
+  opacity: 0.5;
+}
+
+.sheet-nav-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--text-muted);
+}
+
+.sheet-nav-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Dragging state */
+.sheet-nav-card.is-dragging {
+  opacity: 0.3;
+}
+
+/* Drop indicators */
+.sheet-nav-card.drop-above {
+  box-shadow: 0 -2px 0 0 var(--interactive-accent);
+}
+
+.sheet-nav-card.drop-below {
+  box-shadow: 0 2px 0 0 var(--interactive-accent);
+}
+
+/* ─── Folder cards ─── */
+.sheet-nav-folder-card {
+  align-items: center;
+  gap: 0;
+  padding: 14px 10px 14px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+  border-radius: 0;
+  margin: 0;
+}
+
+.sheet-nav-folder-card:last-of-type {
+  border-bottom: none;
+}
+
+.sheet-nav-folder-card:hover {
+  background-color: transparent;
+}
+
+/* Subtle accent bar on left edge on hover */
+.sheet-nav-folder-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  opacity: 0;
+  transition: opacity 0.2s ease, top 0.25s ease, bottom 0.25s ease;
+}
+
+.sheet-nav-folder-card:hover::before {
+  opacity: 1;
+  top: 15%;
+  bottom: 15%;
+}
+
+/* Chapter number */
+.sheet-nav-chapter-num {
+  flex-shrink: 0;
+  width: 32px;
+  font-size: 22px;
+  font-weight: 200;
+  line-height: 1;
+  color: var(--text-muted);
+  text-align: center;
+  opacity: 0.55;
+  transition: opacity 0.2s ease, color 0.2s ease;
+  padding-top: 1px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.sheet-nav-folder-card:hover .sheet-nav-chapter-num {
+  opacity: 0.85;
+  color: var(--text-normal);
+}
+
+/* Folder content */
+.sheet-nav-folder-content {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  padding-left: 4px;
+}
+
+.sheet-nav-card-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-normal);
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.sheet-nav-card-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  letter-spacing: 0.03em;
+}
+
+.sheet-nav-chevron {
+  font-size: 16px;
+  color: var(--text-faint);
+  font-weight: 300;
+  flex-shrink: 0;
+  line-height: 1;
+  cursor: pointer;
+  align-self: center;
+  opacity: 0.4;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sheet-nav-folder-card:hover .sheet-nav-chevron {
+  opacity: 0.8;
+  transform: translateX(2px);
+}
+
+/* ─── File cards ─── */
+.sheet-nav-file-card {
+  align-items: flex-start;
+  gap: 0;
+  padding: 14px 10px 14px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+  border-radius: 0;
+  margin: 0;
+}
+
+.sheet-nav-file-card:last-child {
+  border-bottom: none;
+}
+
+.sheet-nav-file-card:hover {
+  background-color: transparent;
+}
+
+/* Accent bar on hover — same as folders */
+.sheet-nav-file-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  opacity: 0;
+  transition: opacity 0.2s ease, top 0.25s ease, bottom 0.25s ease;
+}
+
+.sheet-nav-file-card:hover::before {
+  opacity: 1;
+  top: 10%;
+  bottom: 10%;
+}
+
+/* File number */
+.sheet-nav-file-num {
+  flex-shrink: 0;
+  width: 22px;
+  font-size: 15px;
+  font-weight: 200;
+  line-height: 1;
+  color: var(--text-muted);
+  text-align: center;
+  opacity: 0.45;
+  transition: opacity 0.2s ease, color 0.2s ease;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.sheet-nav-file-card:hover .sheet-nav-file-num {
+  opacity: 0.75;
+  color: var(--text-normal);
+}
+
+.sheet-nav-file-content {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  padding-left: 4px;
+}
+
+.sheet-nav-card-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-normal);
+  margin-bottom: 3px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.sheet-nav-card-preview {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
