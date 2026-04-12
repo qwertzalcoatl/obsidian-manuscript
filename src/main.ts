@@ -804,6 +804,7 @@ export class SheetNavigatorView extends ItemView {
 
 class SheetNavigatorSettingTab extends PluginSettingTab {
   plugin: SheetNavigatorPlugin;
+  private validationTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: App, plugin: SheetNavigatorPlugin) {
     super(app, plugin);
@@ -876,11 +877,18 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
   }
 
   private validatePdflatex(statusEl: HTMLElement): void {
+    // Cancel any pending check so stale callbacks never update a detached element
+    if (this.validationTimer !== null) {
+      clearTimeout(this.validationTimer);
+      this.validationTimer = null;
+    }
     statusEl.setText('Checking…');
     statusEl.className = 'sn-pdflatex-status';
-    // Run in next tick so UI updates before the synchronous execFileSync
-    setTimeout(() => {
-      const found = checkPdflatex(this.plugin.settings.pdflatexPath);
+    // Snapshot the path now; run after paint so "Checking…" renders first
+    const pathToCheck = this.plugin.settings.pdflatexPath;
+    this.validationTimer = setTimeout(() => {
+      this.validationTimer = null;
+      const found = checkPdflatex(pathToCheck);
       statusEl.setText(
         found
           ? '✓ pdflatex found'
