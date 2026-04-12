@@ -28,7 +28,7 @@ interface SheetNavigatorSettings {
 
 const DEFAULT_SETTINGS: SheetNavigatorSettings = {
   orderingEnabled: false,
-  latexExportEnabled: false,
+  latexExportEnabled: true,
   pdflatexPath: 'pdflatex',
   pandocPath: 'pandoc',
 };
@@ -452,9 +452,16 @@ export class SheetNavigatorView extends ItemView {
     chevron.setText("›");
 
     // Card-level: handles selection anywhere on the card (number, padding, content)
+    // Shift-click enters selection mode if not already in it
     card.addEventListener("click", (e: MouseEvent) => {
+      if (e.shiftKey) {
+        this.isSelectionMode
+          ? this.selectRange(folder.path)
+          : this.enterSelectionMode(folder.path);
+        return;
+      }
       if (!this.isSelectionMode) return;
-      e.shiftKey ? this.selectRange(folder.path) : this.toggleSelection(folder.path);
+      this.toggleSelection(folder.path);
     });
     // Content-level: handles navigation when not in selection mode
     content.addEventListener("click", () => {
@@ -515,9 +522,16 @@ export class SheetNavigatorView extends ItemView {
     }
 
     // Card-level: handles selection anywhere on the card
+    // Shift-click enters selection mode if not already in it
     card.addEventListener("click", (e: MouseEvent) => {
+      if (e.shiftKey) {
+        this.isSelectionMode
+          ? this.selectRange(file.path)
+          : this.enterSelectionMode(file.path);
+        return;
+      }
       if (!this.isSelectionMode) return;
-      e.shiftKey ? this.selectRange(file.path) : this.toggleSelection(file.path);
+      this.toggleSelection(file.path);
     });
     // Content-level: opens note when not in selection mode
     content.addEventListener("click", () => {
@@ -639,6 +653,19 @@ export class SheetNavigatorView extends ItemView {
 
     if (Platform.isDesktop && this.plugin.settings.latexExportEnabled) {
       menu.addSeparator();
+      menu.addItem(item => {
+        item
+          .setTitle('Export as PDF')
+          .setIcon('download')
+          .onClick(() => {
+            new ExportModal(
+              this.app,
+              this.plugin,
+              this,
+              new Set([abstractFile.path])
+            ).open();
+          });
+      });
       menu.addItem(item => {
         item
           .setTitle(
