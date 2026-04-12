@@ -348,11 +348,11 @@
   overflow: hidden;
 }
 
-/* ─── Settings: pdflatex status ─── */
+/* ─── Settings: binary status ─── */
 .sn-pdflatex-status {
   font-size: 12px;
   color: var(--text-muted);
-  padding: 4px 0 8px;
+  padding: 2px 0 8px;
 }
 
 .sn-pdflatex-found {
@@ -361,6 +361,15 @@
 
 .sn-pdflatex-missing {
   color: var(--color-orange, #ff9800);
+}
+
+/* ─── Settings: requirement note ─── */
+.sn-pdf-requirement-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  padding-left: 18px;
+  line-height: 1.6;
 }
 
 /* ─── Selection mode ─── */

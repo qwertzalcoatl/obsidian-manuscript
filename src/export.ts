@@ -129,28 +129,31 @@ export function stripMarkdown(content: string): string {
   return text.trim();
 }
 
-export function generateLatex(files: FileContent[], template: ExportTemplate): string {
+// converter defaults to stripMarkdown; pass convertMarkdownToLatex for pandoc
+export function generateLatex(
+  files: FileContent[],
+  template: ExportTemplate,
+  converter: (content: string) => string = stripMarkdown
+): string {
   const def = TEMPLATES.find(t => t.id === template);
   if (!def) throw new Error(`Unknown template: ${template}`);
 
-  // Group consecutive files by folder so we can insert chapter breaks between folders
-  // and scene breaks between files within the same folder.
+  // Group consecutive files by folder: chapter breaks between folders,
+  // scene breaks between files within the same folder.
   const groups: string[][] = [];
   let currentFolder: string | undefined;
 
   for (const f of files) {
-    const stripped = stripMarkdown(f.content);
-    if (!stripped) continue;
+    const converted = converter(f.content);
+    if (!converted.trim()) continue;
     const folder = f.folderPath ?? '';
     if (folder !== currentFolder) {
       groups.push([]);
       currentFolder = folder;
     }
-    groups[groups.length - 1].push(stripped);
+    groups[groups.length - 1].push(converted);
   }
 
-  // Scenes within a chapter: extra vertical space
-  // Chapters: page break
   const body = groups
     .map(scenes => scenes.join('\n\n\\vspace{2\\baselineskip}\n\n'))
     .join('\n\n\\newpage\n\n');
@@ -167,6 +170,27 @@ export function checkPdflatex(pdflatexPath: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function checkPandoc(pandocPath: string): boolean {
+  try {
+    execFileSync(pandocPath, ['--version'], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Convert markdown to LaTeX via pandoc (body only, no preamble).
+// --wrap=none prevents line-wrapping that can confuse downstream LaTeX processing.
+// +smart enables typographic quotes and dashes.
+export function convertMarkdownToLatex(content: string, pandocPath: string): string {
+  const result = execFileSync(
+    pandocPath,
+    ['--from', 'markdown+smart', '--to', 'latex', '--wrap=none'],
+    { input: content, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+  );
+  return (result as string).trim();
 }
 
 export interface CompileResult {
@@ -298,7 +322,9 @@ export class ExportModal extends Modal {
         }))
       );
 
-      const tex = generateLatex(fileContents, template);
+      const pandocPath = this.plugin.settings.pandocPath;
+      const converter = (content: string) => convertMarkdownToLatex(content, pandocPath);
+      const tex = generateLatex(fileContents, template, converter);
 
       statusEl.setText('Compiling PDF (this may take a few seconds)…');
       // compilePdf is synchronous; wrap in setTimeout to let the status text render first
@@ -315,9 +341,9 @@ export class ExportModal extends Modal {
     } catch (err: any) {
       const msg: string = err.message ?? String(err);
       if (msg.toLowerCase().includes('enoent')) {
-        statusEl.setText('pdflatex not found. Set its path in Sheet Navigator settings.');
+        statusEl.setText('A required binary was not found (pdflatex or pandoc). Check paths in Sheet Navigator settings.');
       } else {
-        statusEl.setText(`LaTeX error:\n${msg.slice(0, 800)}`);
+        statusEl.setText(`Export error:\n${msg.slice(0, 800)}`);
       }
     }
   }

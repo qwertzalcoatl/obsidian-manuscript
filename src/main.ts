@@ -14,7 +14,7 @@ import {
   Notice,
   Platform,
 } from "obsidian";
-import { checkPdflatex, ExportModal } from './export';
+import { checkPdflatex, checkPandoc, ExportModal } from './export';
 
 const VIEW_TYPE = "sheet-navigator-view";
 const PREVIEW_LENGTH = 120;
@@ -23,12 +23,14 @@ interface SheetNavigatorSettings {
   orderingEnabled: boolean;
   latexExportEnabled: boolean;
   pdflatexPath: string;
+  pandocPath: string;
 }
 
 const DEFAULT_SETTINGS: SheetNavigatorSettings = {
   orderingEnabled: false,
   latexExportEnabled: false,
   pdflatexPath: 'pdflatex',
+  pandocPath: 'pandoc',
 };
 
 interface ParsedName {
@@ -802,7 +804,8 @@ export class SheetNavigatorView extends ItemView {
 
 class SheetNavigatorSettingTab extends PluginSettingTab {
   plugin: SheetNavigatorPlugin;
-  private validationTimer: ReturnType<typeof setTimeout> | null = null;
+  private pdflatexTimer: ReturnType<typeof setTimeout> | null = null;
+  private pandocTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: App, plugin: SheetNavigatorPlugin) {
     super(app, plugin);
@@ -843,7 +846,7 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Enable PDF export')
-      .setDesc('Adds export to PDF via pdflatex. Requires a TeX distribution (MacTeX, MiKTeX, or TeX Live).')
+      .setDesc('Export selected folders and notes to a Normseite-formatted PDF.')
       .addToggle(toggle =>
         toggle
           .setValue(this.plugin.settings.latexExportEnabled)
@@ -856,42 +859,63 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
 
     if (!this.plugin.settings.latexExportEnabled) return;
 
+    containerEl.createEl('p', {
+      cls: 'sn-pdf-requirement-note',
+      text: 'Requires two external tools:',
+    });
+    const reqList = containerEl.createEl('ul', { cls: 'sn-pdf-requirement-note' });
+    reqList.createEl('li').createEl('span').setText('pdflatex — part of any TeX distribution (MacTeX, MiKTeX, TeX Live)');
+    const pandocLi = reqList.createEl('li');
+    pandocLi.createEl('span').setText('pandoc — ships with the MacTeX full installer; otherwise ');
+    pandocLi.createEl('code').setText('brew install pandoc');
+    pandocLi.createEl('span').setText(' or pandoc.org');
+
     new Setting(containerEl)
       .setName('pdflatex path')
-      .setDesc('Full path to the pdflatex binary, or just "pdflatex" if it is on your PATH.')
+      .setDesc('Full path, or just "pdflatex" if it is on your PATH.')
       .addText(text => {
         text.setValue(this.plugin.settings.pdflatexPath);
         text.onChange(async value => {
           this.plugin.settings.pdflatexPath = value.trim() || 'pdflatex';
           await this.plugin.saveSettings();
-          this.validatePdflatex(statusEl);
+          this.validateBinary('pdflatex', this.plugin.settings.pdflatexPath, checkPdflatex, pdflatexStatusEl);
         });
       });
+    const pdflatexStatusEl = containerEl.createDiv({ cls: 'sn-pdflatex-status' });
+    this.validateBinary('pdflatex', this.plugin.settings.pdflatexPath, checkPdflatex, pdflatexStatusEl);
 
-    const statusEl = containerEl.createDiv({ cls: 'sn-pdflatex-status' });
-
-    // Validate on first render
-    this.validatePdflatex(statusEl);
+    new Setting(containerEl)
+      .setName('pandoc path')
+      .setDesc('Full path, or just "pandoc" if it is on your PATH.')
+      .addText(text => {
+        text.setValue(this.plugin.settings.pandocPath);
+        text.onChange(async value => {
+          this.plugin.settings.pandocPath = value.trim() || 'pandoc';
+          await this.plugin.saveSettings();
+          this.validateBinary('pandoc', this.plugin.settings.pandocPath, checkPandoc, pandocStatusEl);
+        });
+      });
+    const pandocStatusEl = containerEl.createDiv({ cls: 'sn-pdflatex-status' });
+    this.validateBinary('pandoc', this.plugin.settings.pandocPath, checkPandoc, pandocStatusEl);
   }
 
-  private validatePdflatex(statusEl: HTMLElement): void {
-    // Cancel any pending check so stale callbacks never update a detached element
-    if (this.validationTimer !== null) {
-      clearTimeout(this.validationTimer);
-      this.validationTimer = null;
+  private validateBinary(
+    name: string,
+    pathToCheck: string,
+    checkFn: (p: string) => boolean,
+    statusEl: HTMLElement
+  ): void {
+    const timerKey = name === 'pandoc' ? 'pandocTimer' : 'pdflatexTimer';
+    if (this[timerKey] !== null) {
+      clearTimeout(this[timerKey]!);
+      this[timerKey] = null;
     }
     statusEl.setText('Checking…');
     statusEl.className = 'sn-pdflatex-status';
-    // Snapshot the path now; run after paint so "Checking…" renders first
-    const pathToCheck = this.plugin.settings.pdflatexPath;
-    this.validationTimer = setTimeout(() => {
-      this.validationTimer = null;
-      const found = checkPdflatex(pathToCheck);
-      statusEl.setText(
-        found
-          ? '✓ pdflatex found'
-          : '✗ Not found — install MacTeX, MiKTeX, or TeX Live'
-      );
+    this[timerKey] = setTimeout(() => {
+      this[timerKey] = null;
+      const found = checkFn(pathToCheck);
+      statusEl.setText(found ? `✓ ${name} found` : `✗ Not found`);
       statusEl.className = `sn-pdflatex-status ${found ? 'sn-pdflatex-found' : 'sn-pdflatex-missing'}`;
     }, 0);
   }
