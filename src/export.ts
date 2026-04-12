@@ -164,3 +164,15 @@ export function compilePdf(texContent: string, pdflatexPath: string): CompileRes
     throw new Error(stderr || err.message);
   }
 }
+
+// ─── Export Modal (stub — replaced in Task 11) ────────────────────────────────
+
+export class ExportModal {
+  constructor(
+    _app: App,
+    _plugin: any,
+    _view: any,
+    _paths: Set<string>
+  ) {}
+  open(): void {}
+}

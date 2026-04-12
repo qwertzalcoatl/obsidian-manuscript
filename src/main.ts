@@ -14,7 +14,7 @@ import {
   Notice,
   Platform,
 } from "obsidian";
-import { checkPdflatex } from './export';
+import { checkPdflatex, ExportModal } from './export';
 
 const VIEW_TYPE = "sheet-navigator-view";
 const PREVIEW_LENGTH = 120;
@@ -213,13 +213,39 @@ class SheetNavigatorView extends ItemView {
     const title = titleRow.createDiv({ cls: "sheet-nav-title" });
     title.setText(folder.name || "Vault");
 
-    const newBtn = titleRow.createDiv({
-      cls: "sheet-nav-new-btn",
+    const toolbar = titleRow.createDiv({ cls: "sheet-nav-toolbar" });
+
+    const newBtn = toolbar.createDiv({
+      cls: "sheet-nav-toolbar-btn",
       attr: { "aria-label": "New note" },
     });
     newBtn.innerHTML =
       '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>';
     newBtn.addEventListener("click", () => this.createNewNote());
+
+    if (Platform.isDesktop && this.plugin.settings.latexExportEnabled) {
+      const exportBtn = toolbar.createDiv({
+        cls: "sheet-nav-toolbar-btn sheet-nav-export-btn",
+        attr: { "aria-label": "Export to PDF" },
+      });
+      exportBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+      this.exportBtnEl = exportBtn;
+
+      const hasSelection = this.selectedPaths.size > 0;
+      exportBtn.classList.toggle("is-dimmed", !hasSelection);
+      exportBtn.classList.toggle("is-active", hasSelection);
+
+      exportBtn.addEventListener("click", () => {
+        if (this.selectedPaths.size === 0) {
+          new Notice("Right-click items to select them for export.");
+          return;
+        }
+        new ExportModal(this.app, this.plugin, this, new Set(this.selectedPaths)).open();
+      });
+    } else {
+      this.exportBtnEl = null;
+    }
 
     // List
     this.listEl.empty();

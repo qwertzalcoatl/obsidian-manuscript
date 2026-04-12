@@ -39,11 +39,56 @@
   opacity: 0.9;
 }
 
+.sheet-nav-title-row {
+  display: flex;
+  align-items: center;
+}
+
 .sheet-nav-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-normal);
   line-height: 1.3;
+}
+
+/* ─── Header toolbar ─── */
+.sheet-nav-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sheet-nav-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sheet-nav-toolbar-btn:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.sheet-nav-export-btn.is-dimmed {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.sheet-nav-export-btn.is-dimmed:hover {
+  background-color: transparent;
+  color: var(--text-muted);
+}
+
+.sheet-nav-export-btn.is-active {
+  color: var(--interactive-accent);
 }
 
 /* Scrollable list */
