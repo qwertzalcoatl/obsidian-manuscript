@@ -10,6 +10,8 @@ import {
   Setting,
   PluginSettingTab,
   App,
+  FileSystemAdapter,
+  Notice,
 } from "obsidian";
 
 const VIEW_TYPE = "sheet-navigator-view";
@@ -539,6 +541,33 @@ class SheetNavigatorView extends ItemView {
           );
           if (confirmed) {
             await this.app.vault.trash(abstractFile, true);
+          }
+        });
+    });
+
+    menu.addSeparator();
+
+    menu.addItem((item) => {
+      item
+        .setTitle("Copy vault path")
+        .setIcon("copy")
+        .onClick(() => {
+          navigator.clipboard.writeText(abstractFile.path);
+          new Notice("Vault path copied");
+        });
+    });
+
+    menu.addItem((item) => {
+      item
+        .setTitle("Copy absolute path")
+        .setIcon("copy")
+        .onClick(() => {
+          const adapter = this.app.vault.adapter;
+          if (adapter instanceof FileSystemAdapter) {
+            const absPath =
+              adapter.getBasePath() + "/" + abstractFile.path;
+            navigator.clipboard.writeText(absPath);
+            new Notice("Absolute path copied");
           }
         });
     });
