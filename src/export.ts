@@ -261,8 +261,11 @@ export class ExportModal extends Modal {
       });
     } catch (err: any) {
       const msg: string = err.message ?? String(err);
-      // Always show raw error so we can diagnose — friendly messages come later
-      statusEl.setText(`Error: ${msg.slice(0, 800)}`);
+      if (msg.toLowerCase().includes('enoent')) {
+        statusEl.setText('pdflatex not found. Set its path in Sheet Navigator settings.');
+      } else {
+        statusEl.setText(`LaTeX error:\n${msg.slice(0, 800)}`);
+      }
     }
   }
 
