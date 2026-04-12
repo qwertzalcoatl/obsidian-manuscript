@@ -55,12 +55,55 @@ export const TEMPLATES: TemplateDefinition[] = [
 
 // ─── Placeholders for Task 2 & 3 ─────────────────────────────────────────────
 
-export function escapeLatex(_text: string): string {
-  throw new Error('not implemented');
+export function escapeLatex(text: string): string {
+  return text
+    // Backslash must come first — use placeholder to avoid double-escaping braces
+    .replace(/\\/g, '\x00BS\x00')
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
+    .replace(/\x00BS\x00/g, '\\textbackslash{}')
+    .replace(/&/g, '\\&')
+    .replace(/%/g, '\\%')
+    .replace(/\$/g, '\\$')
+    .replace(/#/g, '\\#')
+    .replace(/_/g, '\\_')
+    .replace(/\^/g, '\\textasciicircum{}')
+    .replace(/~/g, '\\textasciitilde{}');
 }
 
-export function stripMarkdown(_content: string): string {
-  throw new Error('not implemented');
+export function stripMarkdown(content: string): string {
+  let text = content;
+
+  // Strip YAML frontmatter
+  if (text.startsWith('---')) {
+    const end = text.indexOf('---', 3);
+    if (end !== -1) text = text.slice(end + 3).trimStart();
+  }
+
+  // Strip fenced code blocks before other processing (consume surrounding newlines too)
+  text = text.replace(/\n?```[\s\S]*?```\n?/g, '\n');
+
+  // Strip heading markers, keep text
+  text = text.replace(/^#{1,6}\s+(.+)$/gm, '$1');
+
+  // Strip bold (**text** and __text__)
+  text = text.replace(/\*\*(.+?)\*\*/g, '$1');
+  text = text.replace(/__(.+?)__/g, '$1');
+
+  // Strip italic (*text* and _text_) — must come after bold
+  text = text.replace(/\*(.+?)\*/g, '$1');
+  text = text.replace(/_(.+?)_/g, '$1');
+
+  // Strip links [text](url) → text
+  text = text.replace(/\[(.+?)\]\(.+?\)/g, '$1');
+
+  // Strip inline code backticks
+  text = text.replace(/`(.+?)`/g, '$1');
+
+  // Escape remaining LaTeX special characters
+  text = escapeLatex(text);
+
+  return text.trim();
 }
 
 export function generateLatex(_files: FileContent[], _template: ExportTemplate): string {
