@@ -1,7 +1,7 @@
 {
   "name": "obsidian-sheet-navigator",
   "version": "1.0.0",
-  "description": "Ulysses-style single-column drill-down navigator with content previews for Obsidian",
+  "description": "Single-column drill-down navigator with content previews for Obsidian",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -14,7 +14,8 @@
     "sidebar",
     "file-explorer",
     "writing",
-    "ulysses"
+    "novel",
+    "book"
   ],
   "author": "",
   "license": "MIT",
