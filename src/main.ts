@@ -449,8 +449,23 @@ class SheetNavigatorView extends ItemView {
     const chevron = card.createDiv({ cls: "sheet-nav-chevron" });
     chevron.setText("›");
 
-    content.addEventListener("click", () => this.drillInto(folder));
-    chevron.addEventListener("click", () => this.drillInto(folder));
+    content.addEventListener("click", (e: MouseEvent) => {
+      if (this.isSelectionMode) {
+        if (e.shiftKey) {
+          this.selectRange(folder.path);
+        } else {
+          this.toggleSelection(folder.path);
+        }
+        return;
+      }
+      this.drillInto(folder);
+    });
+    chevron.addEventListener("click", (e: MouseEvent) => {
+      // Chevron always drills in — explicit navigation intent
+      e.stopPropagation();
+      if (this.isSelectionMode) this.exitSelectionMode();
+      this.drillInto(folder);
+    });
     card.addEventListener("contextmenu", (e) =>
       this.showContextMenu(e, folder)
     );
@@ -499,7 +514,15 @@ class SheetNavigatorView extends ItemView {
       // File might not be readable
     }
 
-    content.addEventListener("click", () => {
+    content.addEventListener("click", (e: MouseEvent) => {
+      if (this.isSelectionMode) {
+        if (e.shiftKey) {
+          this.selectRange(file.path);
+        } else {
+          this.toggleSelection(file.path);
+        }
+        return;
+      }
       this.app.workspace.openLinkText(file.path, "", false);
     });
 
