@@ -38,6 +38,10 @@ describe('stripMarkdown', () => {
     const input = '---\ntitle: Test\n---\nHello world';
     expect(stripMarkdown(input)).toBe('Hello world');
   });
+  it('strips frontmatter even when YAML values contain ---', () => {
+    const input = '---\ndescription: a---b\n---\nContent';
+    expect(stripMarkdown(input)).toBe('Content');
+  });
   it('strips heading markers but keeps text', () => {
     expect(stripMarkdown('# Chapter One')).toBe('Chapter One');
     expect(stripMarkdown('## Scene')).toBe('Scene');

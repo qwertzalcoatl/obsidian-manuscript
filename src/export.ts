@@ -55,13 +55,15 @@ export const TEMPLATES: TemplateDefinition[] = [
 
 // ─── Placeholders for Task 2 & 3 ─────────────────────────────────────────────
 
+const BACKSLASH_SENTINEL = '\uE000';
+
 export function escapeLatex(text: string): string {
   return text
     // Backslash must come first — use placeholder to avoid double-escaping braces
-    .replace(/\\/g, '\x00BS\x00')
+    .replace(/\\/g, BACKSLASH_SENTINEL)
     .replace(/\{/g, '\\{')
     .replace(/\}/g, '\\}')
-    .replace(/\x00BS\x00/g, '\\textbackslash{}')
+    .replace(new RegExp(BACKSLASH_SENTINEL, 'g'), '\\textbackslash{}')
     .replace(/&/g, '\\&')
     .replace(/%/g, '\\%')
     .replace(/\$/g, '\\$')
@@ -74,10 +76,10 @@ export function escapeLatex(text: string): string {
 export function stripMarkdown(content: string): string {
   let text = content;
 
-  // Strip YAML frontmatter
+  // Strip YAML frontmatter (handles --- inside YAML values)
   if (text.startsWith('---')) {
-    const end = text.indexOf('---', 3);
-    if (end !== -1) text = text.slice(end + 3).trimStart();
+    const match = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+    if (match) text = text.slice(match[0].length).trimStart();
   }
 
   // Strip fenced code blocks before other processing (consume surrounding newlines too)
