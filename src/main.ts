@@ -49,7 +49,7 @@ interface DragState {
 
 // ─── View ───
 
-class SheetNavigatorView extends ItemView {
+export class SheetNavigatorView extends ItemView {
   plugin: SheetNavigatorPlugin;
   currentPath: string;
   history: HistoryEntry[];

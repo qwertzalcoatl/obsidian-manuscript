@@ -2,7 +2,20 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { App, Modal, Notice, Platform, Setting, TFile, TFolder } from 'obsidian';
+import { App, Modal, Notice, Setting, TFile, TFolder } from 'obsidian';
+import type SheetNavigatorPlugin from './main';
+import type { SheetNavigatorView } from './main';
+
+// Minimal type for @electron/remote (provided by Obsidian at runtime, not installed)
+interface ElectronRemote {
+  dialog: {
+    showSaveDialog(options: {
+      title: string;
+      defaultPath: string;
+      filters: Array<{ name: string; extensions: string[] }>;
+    }): Promise<{ canceled: boolean; filePath?: string }>;
+  };
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -165,14 +178,155 @@ export function compilePdf(texContent: string, pdflatexPath: string): CompileRes
   }
 }
 
-// ─── Export Modal (stub — replaced in Task 11) ────────────────────────────────
+// ─── Export Modal ─────────────────────────────────────────────────────────────
 
-export class ExportModal {
+export class ExportModal extends Modal {
+  private plugin: SheetNavigatorPlugin;
+  private view: SheetNavigatorView;
+  private selectedPaths: Set<string>;
+
   constructor(
-    _app: App,
-    _plugin: any,
-    _view: any,
-    _paths: Set<string>
-  ) {}
-  open(): void {}
+    app: App,
+    plugin: SheetNavigatorPlugin,
+    view: SheetNavigatorView,
+    selectedPaths: Set<string>
+  ) {
+    super(app);
+    this.plugin = plugin;
+    this.view = view;
+    this.selectedPaths = selectedPaths;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.addClass('sn-export-modal');
+    contentEl.createEl('h3', { text: 'Export as PDF' });
+
+    // Selected items summary
+    const names = [...this.selectedPaths].map(p => p.split('/').pop() ?? p);
+    const summaryEl = contentEl.createDiv({ cls: 'sn-export-summary' });
+    summaryEl.setText(names.join(', '));
+
+    // Template selector
+    let selectedTemplate: ExportTemplate = 'normseite-de';
+    new Setting(contentEl)
+      .setName('Template')
+      .addDropdown(dd => {
+        TEMPLATES.forEach(t => dd.addOption(t.id, t.label));
+        dd.setValue(selectedTemplate);
+        dd.onChange(v => { selectedTemplate = v as ExportTemplate; });
+      });
+
+    // Status / progress area
+    const statusEl = contentEl.createDiv({ cls: 'sn-export-status' });
+
+    // Buttons
+    new Setting(contentEl)
+      .addButton(btn =>
+        btn
+          .setButtonText('Export')
+          .setCta()
+          .onClick(() => this.runExport(selectedTemplate, statusEl))
+      )
+      .addButton(btn =>
+        btn.setButtonText('Cancel').onClick(() => this.close())
+      );
+  }
+
+  private async runExport(template: ExportTemplate, statusEl: HTMLElement): Promise<void> {
+    try {
+      statusEl.setText('Collecting files…');
+      const files = this.collectFiles();
+      if (files.length === 0) {
+        statusEl.setText('No markdown files found in selection.');
+        return;
+      }
+
+      statusEl.setText('Generating LaTeX…');
+      const fileContents: FileContent[] = await Promise.all(
+        files.map(async f => ({
+          title: f.basename,
+          content: await this.app.vault.read(f),
+        }))
+      );
+
+      const tex = generateLatex(fileContents, template);
+
+      statusEl.setText('Compiling PDF (this may take a few seconds)…');
+      // compilePdf is synchronous; wrap in setTimeout to let the status text render first
+      await new Promise<void>((resolve, reject) => {
+        setTimeout(() => {
+          try {
+            const result = compilePdf(tex, this.plugin.settings.pdflatexPath);
+            this.savePdf(result, statusEl).then(resolve).catch(reject);
+          } catch (err) {
+            reject(err);
+          }
+        }, 50);
+      });
+    } catch (err: any) {
+      const msg: string = err.message ?? String(err);
+      if (msg.toLowerCase().includes('enoent') || msg.toLowerCase().includes('pdflatex')) {
+        statusEl.setText('pdflatex not found. Set its path in Sheet Navigator settings.');
+      } else {
+        statusEl.setText(`Compilation error:\n${msg.slice(0, 500)}`);
+      }
+    }
+  }
+
+  private async savePdf(result: CompileResult, statusEl: HTMLElement): Promise<void> {
+    try {
+      const { dialog } = require('@electron/remote') as ElectronRemote;
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Save PDF',
+        defaultPath: 'export.pdf',
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+      });
+
+      if (!canceled && filePath) {
+        fs.copyFileSync(result.pdfPath, filePath);
+        new Notice('PDF exported successfully.');
+        statusEl.setText('Saved.');
+        setTimeout(() => this.close(), 1200);
+      }
+    } finally {
+      // Always clean up temp dir
+      try { fs.rmSync(result.tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  }
+
+  private collectFiles(): TFile[] {
+    const result: TFile[] = [];
+    // Sort selected paths for consistent ordering
+    const sorted = [...this.selectedPaths].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    );
+    for (const p of sorted) {
+      const normalized = p.startsWith('/') ? p.slice(1) : p;
+      const item = this.app.vault.getAbstractFileByPath(normalized);
+      if (item instanceof TFile && item.extension === 'md') {
+        result.push(item);
+      } else if (item instanceof TFolder) {
+        this.collectFromFolder(item, result);
+      }
+    }
+    return result;
+  }
+
+  private collectFromFolder(folder: TFolder, result: TFile[]): void {
+    const children = [...folder.children].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true })
+    );
+    for (const child of children) {
+      if (child instanceof TFile && child.extension === 'md') {
+        result.push(child);
+      } else if (child instanceof TFolder) {
+        this.collectFromFolder(child, result);
+      }
+    }
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
 }
