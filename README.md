@@ -2,20 +2,21 @@
 
 A single-column, drill-down sidebar for [Obsidian](https://obsidian.md) — built for writers who organize novels, screenplays, and long-form projects in folders and numbered files.
 
-Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click to drill in, click back to go up.
+Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click to open a scene, shift-click to select for export.
 
 ![Sheet Navigator screenshot](screenshot.png)
 
 ## Features
 
-- **Drill-down navigation** — single-column view, one level at a time, like a Miller column with depth 1
+- **Drill-down navigation** — single-column view, one level at a time
 - **Content previews** — each note card shows the first few lines of text
 - **Smart name parsing** — extracts chapter numbers and titles from filenames like `1 – Die Preisverleihung` or `3 - Chapter Three`
-- **Drag-and-drop reordering** — reorder scenes and chapters by dragging; items are renumbered by renaming their numeric prefix (opt-in via settings)
-- **New note button** — creates the next numbered note in the current folder (also available as `Shift+N`)
+- **Drag-and-drop reordering** — reorder scenes and chapters by dragging; items are renumbered sequentially (opt-in via settings)
+- **New note button** — creates the next numbered note in the current folder (`Cmd+N`)
 - **Right-click context menu** — rename or delete files and folders
 - **Active note highlight** — the currently open note is highlighted in the sidebar
 - **Live updates** — the list refreshes when files are created, renamed, or modified
+- **PDF export** — export any selection of scenes and chapters as a Normseite-formatted PDF
 
 ## How it works
 
@@ -38,6 +39,28 @@ Files and folders are sorted naturally by name. Use numeric prefixes to control 
 
 Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dragging and dropping renumbers all items in the current folder sequentially (1, 2, 3…), preserving titles and separators.
 
+### PDF export (Normseite)
+
+Select scenes and chapters, then click the export button in the toolbar to export a Normseite-formatted PDF.
+
+**Selecting:**
+- **Click a note** — selects it (highlights it, activates the export button)
+- **Shift-click a note or folder** — adds it to the selection
+- **Escape** — clears the selection
+
+**Exporting:**
+- Click the **↓ export button** in the header toolbar
+- Choose a template (Normseite DE) and click Export
+- A native Save As dialog lets you choose where to save the PDF
+
+Files within the same folder are separated by scene breaks. Different folders produce page breaks between chapters. Markdown headings are converted to formatted LaTeX headings.
+
+**Requirements:** pdflatex and pandoc must be installed.
+- **pdflatex** — part of any TeX distribution: [MacTeX](https://www.tug.org/mactex/), [MiKTeX](https://miktex.org), [TeX Live](https://www.tug.org/texlive/)
+- **pandoc** — ships with the MacTeX full installer; otherwise `brew install pandoc` or [pandoc.org](https://pandoc.org)
+
+Configure paths in **Settings > Sheet Navigator > PDF Export** if the binaries are not on your PATH.
+
 ## Installation
 
 ### From Obsidian Community Plugins
@@ -59,9 +82,8 @@ Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dr
 npm install
 npm run dev    # watch mode
 npm run build  # production build
+npm test       # run tests
 ```
-
-Copy `main.js`, `styles.css`, and `manifest.json` to your vault's `.obsidian/plugins/sheet-navigator/` for testing.
 
 ## License
 
