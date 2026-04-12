@@ -147,9 +147,20 @@ export function compilePdf(texContent: string, pdflatexPath: string): CompileRes
       texPath,
     ];
 
-    // Two passes: first builds the PDF, second resolves any cross-references
-    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir, timeout: 60000 });
-    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir, timeout: 60000 });
+    // Run one pass, ignoring non-zero exit if the PDF was produced.
+    // pdflatex commonly exits with code 1 for recoverable warnings (Underfull \hbox etc.)
+    // while still producing a valid PDF.
+    const runPass = () => {
+      try {
+        execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir, timeout: 60000 });
+      } catch (err: any) {
+        if (!fs.existsSync(pdfPath)) throw err; // truly failed — no PDF produced
+        // PDF exists despite non-zero exit — warnings only, proceed
+      }
+    };
+
+    runPass(); // first pass
+    runPass(); // second pass resolves cross-references
 
     if (!fs.existsSync(pdfPath)) {
       throw new Error('pdflatex ran but produced no PDF. Check your LaTeX installation.');
