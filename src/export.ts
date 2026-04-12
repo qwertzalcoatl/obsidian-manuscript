@@ -157,10 +157,11 @@ export function compilePdf(texContent: string, pdflatexPath: string): CompileRes
 
     return { pdfPath, tmpDir };
   } catch (err: any) {
-    // Clean up on failure, then rethrow with pdflatex stderr for diagnosis
+    // Clean up on failure, then rethrow — pdflatex logs to stdout, not stderr
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    const stdout = err.stdout ? (err.stdout as Buffer).toString().slice(-2000) : '';
     const stderr = err.stderr ? (err.stderr as Buffer).toString().slice(-2000) : '';
-    throw new Error(stderr || err.message);
+    throw new Error(stdout || stderr || err.message);
   }
 }
 
