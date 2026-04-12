@@ -694,8 +694,6 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
 
     if (!this.plugin.settings.latexExportEnabled) return;
 
-    const statusEl = containerEl.createDiv({ cls: 'sn-pdflatex-status' });
-
     new Setting(containerEl)
       .setName('pdflatex path')
       .setDesc('Full path to the pdflatex binary, or just "pdflatex" if it is on your PATH.')
@@ -707,6 +705,8 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
           this.validatePdflatex(statusEl);
         });
       });
+
+    const statusEl = containerEl.createDiv({ cls: 'sn-pdflatex-status' });
 
     // Validate on first render
     this.validatePdflatex(statusEl);
