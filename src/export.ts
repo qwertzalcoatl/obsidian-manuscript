@@ -184,6 +184,7 @@ export class ExportModal extends Modal {
   private plugin: SheetNavigatorPlugin;
   private view: SheetNavigatorView;
   private selectedPaths: Set<string>;
+  private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     app: App,
@@ -222,12 +223,19 @@ export class ExportModal extends Modal {
 
     // Buttons
     new Setting(contentEl)
-      .addButton(btn =>
+      .addButton(btn => {
         btn
           .setButtonText('Export')
           .setCta()
-          .onClick(() => this.runExport(selectedTemplate, statusEl))
-      )
+          .onClick(async () => {
+            btn.setDisabled(true);
+            try {
+              await this.runExport(selectedTemplate, statusEl);
+            } finally {
+              btn.setDisabled(false);
+            }
+          });
+      })
       .addButton(btn =>
         btn.setButtonText('Cancel').onClick(() => this.close())
       );
@@ -286,8 +294,9 @@ export class ExportModal extends Modal {
       if (!canceled && filePath) {
         fs.copyFileSync(result.pdfPath, filePath);
         new Notice('PDF exported successfully.');
+        this.view.exitSelectionMode();
         statusEl.setText('Saved.');
-        setTimeout(() => this.close(), 1200);
+        this.autoCloseTimer = setTimeout(() => this.close(), 1200);
       }
     } finally {
       // Always clean up temp dir
@@ -297,10 +306,18 @@ export class ExportModal extends Modal {
 
   private collectFiles(): TFile[] {
     const result: TFile[] = [];
-    // Sort selected paths for consistent ordering
-    const sorted = [...this.selectedPaths].sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true })
-    );
+    // Sort selected paths: folders before files, then numeric locale order
+    const sorted = [...this.selectedPaths].sort((a, b) => {
+      const aNorm = a.startsWith('/') ? a.slice(1) : a;
+      const bNorm = b.startsWith('/') ? b.slice(1) : b;
+      const aItem = this.app.vault.getAbstractFileByPath(aNorm);
+      const bItem = this.app.vault.getAbstractFileByPath(bNorm);
+      const aIsFolder = aItem instanceof TFolder;
+      const bIsFolder = bItem instanceof TFolder;
+      if (aIsFolder && !bIsFolder) return -1;
+      if (!aIsFolder && bIsFolder) return 1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
     for (const p of sorted) {
       const normalized = p.startsWith('/') ? p.slice(1) : p;
       const item = this.app.vault.getAbstractFileByPath(normalized);
@@ -327,6 +344,7 @@ export class ExportModal extends Modal {
   }
 
   onClose(): void {
+    if (this.autoCloseTimer !== null) clearTimeout(this.autoCloseTimer);
     this.contentEl.empty();
   }
 }
