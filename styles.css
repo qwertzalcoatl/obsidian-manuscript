@@ -83,10 +83,6 @@
   pointer-events: none;
 }
 
-.sheet-nav-export-btn.is-dimmed:hover {
-  background-color: transparent;
-  color: var(--text-muted);
-}
 
 .sheet-nav-export-btn.is-active {
   color: var(--interactive-accent);

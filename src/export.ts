@@ -157,13 +157,13 @@ export function compilePdf(texContent: string, pdflatexPath: string): CompileRes
 
     const args = [
       '-interaction=nonstopmode',
-      `-output-directory=${tmpDir}`,
+      '-output-directory', tmpDir,
       texPath,
     ];
 
     // Two passes: first builds the PDF, second resolves any cross-references
-    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir });
-    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir });
+    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir, timeout: 60000 });
+    execFileSync(pdflatexPath, args, { stdio: 'pipe', cwd: tmpDir, timeout: 60000 });
 
     if (!fs.existsSync(pdfPath)) {
       throw new Error('pdflatex ran but produced no PDF. Check your LaTeX installation.');
@@ -305,8 +305,8 @@ export class ExportModal extends Modal {
   }
 
   private collectFiles(): TFile[] {
+    const seen = new Set<string>();
     const result: TFile[] = [];
-    // Sort selected paths: folders before files, then numeric locale order
     const sorted = [...this.selectedPaths].sort((a, b) => {
       const aNorm = a.startsWith('/') ? a.slice(1) : a;
       const bNorm = b.startsWith('/') ? b.slice(1) : b;
@@ -322,23 +322,29 @@ export class ExportModal extends Modal {
       const normalized = p.startsWith('/') ? p.slice(1) : p;
       const item = this.app.vault.getAbstractFileByPath(normalized);
       if (item instanceof TFile && item.extension === 'md') {
-        result.push(item);
+        if (!seen.has(item.path)) {
+          seen.add(item.path);
+          result.push(item);
+        }
       } else if (item instanceof TFolder) {
-        this.collectFromFolder(item, result);
+        this.collectFromFolder(item, result, seen);
       }
     }
     return result;
   }
 
-  private collectFromFolder(folder: TFolder, result: TFile[]): void {
+  private collectFromFolder(folder: TFolder, result: TFile[], seen: Set<string>): void {
     const children = [...folder.children].sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { numeric: true })
     );
     for (const child of children) {
       if (child instanceof TFile && child.extension === 'md') {
-        result.push(child);
+        if (!seen.has(child.path)) {
+          seen.add(child.path);
+          result.push(child);
+        }
       } else if (child instanceof TFolder) {
-        this.collectFromFolder(child, result);
+        this.collectFromFolder(child, result, seen);
       }
     }
   }
