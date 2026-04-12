@@ -33,30 +33,16 @@ interface TemplateDefinition {
 }
 
 // ─── Normseite template ───────────────────────────────────────────────────────
-// Normseite (DE): Courier 12pt, ~60 chars/line, ~30 lines/page, A4
-// textwidth=155mm → 60 Courier chars at 12pt (≈2.58mm/char)
-// setstretch=1.667 → baselineskip≈24pt=8.47mm; 247mm text height / 8.47 ≈ 29 lines
+// Uses the stdpage package (CTAN: https://ctan.org/pkg/stdpage), originally
+// released as normseite.sty. Available in TeX Live and MiKTeX out of the box.
+// stdpage enforces 30 lines × 60 chars, Courier 12pt, correct spacing on A4.
 
 const NORMSEITE_TEMPLATE = (body: string): string =>
-  `\\documentclass[12pt,a4paper]{article}
+  `\\documentclass[12pt,a4paper,ngerman]{scrartcl}
 \\usepackage[T1]{fontenc}
 \\usepackage[utf8]{inputenc}
-\\usepackage{courier}
-\\usepackage{geometry}
-\\usepackage{setspace}
-\\geometry{
-  a4paper,
-  top=25mm,
-  bottom=25mm,
-  left=30mm,
-  right=25mm,
-  textwidth=155mm
-}
-\\renewcommand{\\familydefault}{\\ttdefault}
-\\setstretch{1.667}
-\\setlength{\\parindent}{0pt}
-\\setlength{\\parskip}{\\baselineskip}
-\\pagestyle{plain}
+\\usepackage{babel}
+\\usepackage{stdpage}
 \\begin{document}
 ${body}
 \\end{document}

@@ -96,8 +96,8 @@ describe('generateLatex', () => {
 
   it('wraps in Normseite preamble when template is normseite-de', () => {
     const result = generateLatex(files, 'normseite-de');
-    expect(result).toContain('\\usepackage{courier}');
-    expect(result).toContain('textwidth=155mm');
+    expect(result).toContain('\\usepackage{stdpage}');
+    expect(result).toContain('\\usepackage{babel}');
   });
 
   it('throws for unknown template', () => {
