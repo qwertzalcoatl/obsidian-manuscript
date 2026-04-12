@@ -260,10 +260,10 @@ export class ExportModal extends Modal {
       });
     } catch (err: any) {
       const msg: string = err.message ?? String(err);
-      if (msg.toLowerCase().includes('enoent') || msg.toLowerCase().includes('pdflatex')) {
+      if (msg.toLowerCase().includes('enoent')) {
         statusEl.setText('pdflatex not found. Set its path in Sheet Navigator settings.');
       } else {
-        statusEl.setText(`Compilation error:\n${msg.slice(0, 500)}`);
+        statusEl.setText(`LaTeX error:\n${msg.slice(0, 800)}`);
       }
     }
   }
