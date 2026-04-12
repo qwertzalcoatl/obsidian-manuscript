@@ -71,3 +71,45 @@ describe('stripMarkdown', () => {
     expect(stripMarkdown('Hello world')).toBe('Hello world');
   });
 });
+
+describe('generateLatex', () => {
+  const files: import('./export').FileContent[] = [
+    { title: 'Scene 1', content: 'It was a dark night.' },
+    { title: 'Scene 2', content: 'The door opened.' },
+  ];
+
+  it('returns a string containing \\begin{document}', () => {
+    const result = generateLatex(files, 'normseite-de');
+    expect(result).toContain('\\begin{document}');
+  });
+
+  it('returns a string containing \\end{document}', () => {
+    const result = generateLatex(files, 'normseite-de');
+    expect(result).toContain('\\end{document}');
+  });
+
+  it('includes content from all files', () => {
+    const result = generateLatex(files, 'normseite-de');
+    expect(result).toContain('It was a dark night.');
+    expect(result).toContain('The door opened.');
+  });
+
+  it('wraps in Normseite preamble when template is normseite-de', () => {
+    const result = generateLatex(files, 'normseite-de');
+    expect(result).toContain('\\usepackage{courier}');
+    expect(result).toContain('textwidth=155mm');
+  });
+
+  it('throws for unknown template', () => {
+    expect(() => generateLatex(files, 'unknown' as any)).toThrow('Unknown template');
+  });
+
+  it('strips markdown in file content', () => {
+    const withMarkdown: import('./export').FileContent[] = [
+      { title: 'Test', content: '**bold text**' },
+    ];
+    const result = generateLatex(withMarkdown, 'normseite-de');
+    expect(result).toContain('bold text');
+    expect(result).not.toContain('**');
+  });
+});

@@ -53,8 +53,6 @@ export const TEMPLATES: TemplateDefinition[] = [
   { id: 'normseite-de', label: 'Normseite (DE)', wrap: NORMSEITE_TEMPLATE },
 ];
 
-// ─── Placeholders for Task 2 & 3 ─────────────────────────────────────────────
-
 const BACKSLASH_SENTINEL = '\uE000';
 
 export function escapeLatex(text: string): string {
@@ -108,6 +106,14 @@ export function stripMarkdown(content: string): string {
   return text.trim();
 }
 
-export function generateLatex(_files: FileContent[], _template: ExportTemplate): string {
-  throw new Error('not implemented');
+export function generateLatex(files: FileContent[], template: ExportTemplate): string {
+  const def = TEMPLATES.find(t => t.id === template);
+  if (!def) throw new Error(`Unknown template: ${template}`);
+
+  const body = files
+    .map(f => stripMarkdown(f.content))
+    .filter(text => text.length > 0)
+    .join('\n\n\\bigskip\n\n');
+
+  return def.wrap(body);
 }
