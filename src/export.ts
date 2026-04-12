@@ -117,3 +117,47 @@ export function generateLatex(files: FileContent[], template: ExportTemplate): s
 
   return def.wrap(body);
 }
+
+// ─── Compilation ─────────────────────────────────────────────────────────────
+
+export function checkPdflatex(pdflatexPath: string): boolean {
+  try {
+    execSync(`"${pdflatexPath}" --version`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface CompileResult {
+  pdfPath: string;
+  tmpDir: string;
+}
+
+export function compilePdf(texContent: string, pdflatexPath: string): CompileResult {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sheet-nav-'));
+  const texPath = path.join(tmpDir, 'export.tex');
+  const pdfPath = path.join(tmpDir, 'export.pdf');
+
+  try {
+    fs.writeFileSync(texPath, texContent, 'utf-8');
+
+    // Quote paths to handle spaces on all platforms (macOS, Windows, Linux)
+    const cmd = `"${pdflatexPath}" -interaction=nonstopmode -output-directory="${tmpDir}" "${texPath}"`;
+
+    // Two passes: first builds the PDF, second resolves page numbers / cross-refs
+    execSync(cmd, { stdio: 'pipe', cwd: tmpDir });
+    execSync(cmd, { stdio: 'pipe', cwd: tmpDir });
+
+    if (!fs.existsSync(pdfPath)) {
+      throw new Error('pdflatex ran but produced no PDF. Check your LaTeX installation.');
+    }
+
+    return { pdfPath, tmpDir };
+  } catch (err: any) {
+    // Clean up on failure, then rethrow with pdflatex stderr for diagnosis
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    const stderr = err.stderr ? (err.stderr as Buffer).toString().slice(-2000) : '';
+    throw new Error(stderr || err.message);
+  }
+}
