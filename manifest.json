@@ -1,0 +1,10 @@
+{
+  "id": "sheet-navigator",
+  "name": "Sheet Navigator",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Single-column drill-down navigator with content previews, drag-and-drop reordering, and right-click context menus.",
+  "author": "Aljoscha",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
