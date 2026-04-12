@@ -449,19 +449,18 @@ export class SheetNavigatorView extends ItemView {
     const chevron = card.createDiv({ cls: "sheet-nav-chevron" });
     chevron.setText("›");
 
-    content.addEventListener("click", (e: MouseEvent) => {
-      if (this.isSelectionMode) {
-        if (e.shiftKey) {
-          this.selectRange(folder.path);
-        } else {
-          this.toggleSelection(folder.path);
-        }
-        return;
-      }
+    // Card-level: handles selection anywhere on the card (number, padding, content)
+    card.addEventListener("click", (e: MouseEvent) => {
+      if (!this.isSelectionMode) return;
+      e.shiftKey ? this.selectRange(folder.path) : this.toggleSelection(folder.path);
+    });
+    // Content-level: handles navigation when not in selection mode
+    content.addEventListener("click", () => {
+      if (this.isSelectionMode) return; // card-level handles it
       this.drillInto(folder);
     });
     chevron.addEventListener("click", (e: MouseEvent) => {
-      // Chevron always drills in, even in selection mode — it's an explicit navigation intent
+      // Chevron always drills in — stopPropagation prevents card-level selection handler
       e.stopPropagation();
       this.drillInto(folder);
     });
@@ -513,15 +512,14 @@ export class SheetNavigatorView extends ItemView {
       // File might not be readable
     }
 
-    content.addEventListener("click", (e: MouseEvent) => {
-      if (this.isSelectionMode) {
-        if (e.shiftKey) {
-          this.selectRange(file.path);
-        } else {
-          this.toggleSelection(file.path);
-        }
-        return;
-      }
+    // Card-level: handles selection anywhere on the card
+    card.addEventListener("click", (e: MouseEvent) => {
+      if (!this.isSelectionMode) return;
+      e.shiftKey ? this.selectRange(file.path) : this.toggleSelection(file.path);
+    });
+    // Content-level: opens note when not in selection mode
+    content.addEventListener("click", () => {
+      if (this.isSelectionMode) return;
       this.app.workspace.openLinkText(file.path, "", false);
     });
 

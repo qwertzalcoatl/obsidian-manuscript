@@ -42,9 +42,11 @@ describe('stripMarkdown', () => {
     const input = '---\ndescription: a---b\n---\nContent';
     expect(stripMarkdown(input)).toBe('Content');
   });
-  it('strips heading markers but keeps text', () => {
-    expect(stripMarkdown('# Chapter One')).toBe('Chapter One');
-    expect(stripMarkdown('## Scene')).toBe('Scene');
+  it('converts headings to LaTeX formatting', () => {
+    expect(stripMarkdown('# Chapter One')).toContain('\\textbf{Chapter One}');
+    expect(stripMarkdown('## Scene')).toContain('\\textbf{Scene}');
+    expect(stripMarkdown('### Note')).toContain('\\textit{Note}');
+    expect(stripMarkdown('# Chapter One')).not.toContain('#');
   });
   it('strips bold markers', () => {
     expect(stripMarkdown('**bold**')).toBe('bold');

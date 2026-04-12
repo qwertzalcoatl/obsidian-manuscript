@@ -22,6 +22,7 @@ interface ElectronRemote {
 export interface FileContent {
   title: string;
   content: string;
+  folderPath?: string; // used to group files into chapters (folders → \newpage)
 }
 
 export type ExportTemplate = 'normseite-de';
@@ -82,8 +83,23 @@ export function stripMarkdown(content: string): string {
   // Strip fenced code blocks before other processing (consume surrounding newlines too)
   text = text.replace(/\n?```[\s\S]*?```\n?/g, '\n');
 
-  // Strip heading markers, keep text
-  text = text.replace(/^#{1,6}\s+(.+)$/gm, '$1');
+  // Convert headings to LaTeX formatting.
+  // Title text is escaped here separately; a PUA placeholder protects the
+  // resulting LaTeX commands from being mangled by the escapeLatex pass below.
+  const HEADING_SENTINEL = '\uE002';
+  const headingLatex: string[] = [];
+  text = text.replace(/^(#{1,6})\s+(.+)$/gm, (_full, hashes: string, title: string) => {
+    const level = hashes.length;
+    const t = escapeLatex(title.trim());
+    let latex: string;
+    if (level === 1)      latex = `\n\\vspace{2\\baselineskip}\n{\\large\\textbf{${t}}}\n\\vspace{\\baselineskip}\n`;
+    else if (level === 2) latex = `\n\\vspace{\\baselineskip}\n{\\textbf{${t}}}\n`;
+    else if (level === 3) latex = `\n{\\textit{${t}}}\n`;
+    else                  latex = `\n${t}\n`;
+    const idx = headingLatex.length;
+    headingLatex.push(latex);
+    return `${HEADING_SENTINEL}${idx}${HEADING_SENTINEL}`;
+  });
 
   // Strip bold (**text** and __text__)
   text = text.replace(/\*\*(.+?)\*\*/g, '$1');
@@ -99,8 +115,16 @@ export function stripMarkdown(content: string): string {
   // Strip inline code backticks
   text = text.replace(/`(.+?)`/g, '$1');
 
-  // Escape remaining LaTeX special characters
+  // Escape remaining LaTeX special characters (heading placeholders pass through unharmed)
   text = escapeLatex(text);
+
+  // Restore heading LaTeX commands
+  if (headingLatex.length > 0) {
+    text = text.replace(
+      new RegExp(`${HEADING_SENTINEL}(\\d+)${HEADING_SENTINEL}`, 'g'),
+      (_m, idx) => headingLatex[parseInt(idx)]
+    );
+  }
 
   return text.trim();
 }
@@ -109,10 +133,27 @@ export function generateLatex(files: FileContent[], template: ExportTemplate): s
   const def = TEMPLATES.find(t => t.id === template);
   if (!def) throw new Error(`Unknown template: ${template}`);
 
-  const body = files
-    .map(f => stripMarkdown(f.content))
-    .filter(text => text.length > 0)
-    .join('\n\n\\bigskip\n\n');
+  // Group consecutive files by folder so we can insert chapter breaks between folders
+  // and scene breaks between files within the same folder.
+  const groups: string[][] = [];
+  let currentFolder: string | undefined;
+
+  for (const f of files) {
+    const stripped = stripMarkdown(f.content);
+    if (!stripped) continue;
+    const folder = f.folderPath ?? '';
+    if (folder !== currentFolder) {
+      groups.push([]);
+      currentFolder = folder;
+    }
+    groups[groups.length - 1].push(stripped);
+  }
+
+  // Scenes within a chapter: extra vertical space
+  // Chapters: page break
+  const body = groups
+    .map(scenes => scenes.join('\n\n\\vspace{2\\baselineskip}\n\n'))
+    .join('\n\n\\newpage\n\n');
 
   return def.wrap(body);
 }
@@ -253,6 +294,7 @@ export class ExportModal extends Modal {
         files.map(async f => ({
           title: f.basename,
           content: await this.app.vault.read(f),
+          folderPath: f.parent?.path ?? '',
         }))
       );
 
