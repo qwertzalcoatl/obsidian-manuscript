@@ -305,3 +305,18 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ─── Settings: pdflatex status ─── */
+.sn-pdflatex-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 0 8px;
+}
+
+.sn-pdflatex-found {
+  color: var(--color-green, #4caf50);
+}
+
+.sn-pdflatex-missing {
+  color: var(--color-orange, #ff9800);
+}

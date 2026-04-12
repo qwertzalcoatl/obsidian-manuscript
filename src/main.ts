@@ -14,6 +14,7 @@ import {
   Notice,
   Platform,
 } from "obsidian";
+import { checkPdflatex } from './export';
 
 const VIEW_TYPE = "sheet-navigator-view";
 const PREVIEW_LENGTH = 120;
@@ -673,6 +674,57 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
             }
           })
       );
+
+    if (!Platform.isDesktop) return;
+
+    containerEl.createEl('h3', { text: 'PDF Export' });
+
+    new Setting(containerEl)
+      .setName('Enable PDF export')
+      .setDesc('Adds export to PDF via pdflatex. Requires a TeX distribution (MacTeX, MiKTeX, or TeX Live).')
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.latexExportEnabled)
+          .onChange(async value => {
+            this.plugin.settings.latexExportEnabled = value;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    if (!this.plugin.settings.latexExportEnabled) return;
+
+    const statusEl = containerEl.createDiv({ cls: 'sn-pdflatex-status' });
+
+    new Setting(containerEl)
+      .setName('pdflatex path')
+      .setDesc('Full path to the pdflatex binary, or just "pdflatex" if it is on your PATH.')
+      .addText(text => {
+        text.setValue(this.plugin.settings.pdflatexPath);
+        text.onChange(async value => {
+          this.plugin.settings.pdflatexPath = value.trim() || 'pdflatex';
+          await this.plugin.saveSettings();
+          this.validatePdflatex(statusEl);
+        });
+      });
+
+    // Validate on first render
+    this.validatePdflatex(statusEl);
+  }
+
+  private validatePdflatex(statusEl: HTMLElement): void {
+    statusEl.setText('Checking…');
+    statusEl.className = 'sn-pdflatex-status';
+    // Run in next tick so UI updates before the synchronous execFileSync
+    setTimeout(() => {
+      const found = checkPdflatex(this.plugin.settings.pdflatexPath);
+      statusEl.setText(
+        found
+          ? '✓ pdflatex found'
+          : '✗ Not found — install MacTeX, MiKTeX, or TeX Live'
+      );
+      statusEl.className = `sn-pdflatex-status ${found ? 'sn-pdflatex-found' : 'sn-pdflatex-missing'}`;
+    }, 0);
   }
 }
 
