@@ -997,7 +997,7 @@ export default class SheetNavigatorPlugin extends Plugin {
     this.addCommand({
       id: "new-note-in-current-folder",
       name: "New note in current folder",
-      hotkeys: [{ modifiers: ["Shift"], key: "n" }],
+      hotkeys: [{ modifiers: ["Mod"], key: "n" }],
       checkCallback: (checking: boolean) => {
         const view = this.getActiveSheetView();
         if (view) {
