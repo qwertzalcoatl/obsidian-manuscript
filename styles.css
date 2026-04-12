@@ -320,3 +320,20 @@
 .sn-pdflatex-missing {
   color: var(--color-orange, #ff9800);
 }
+
+/* ─── Selection mode ─── */
+.sheet-nav-card.is-selected {
+  background-color: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  box-shadow: inset 3px 0 0 0 var(--interactive-accent);
+}
+
+.sheet-nav-card.is-selected .sheet-nav-card-title,
+.sheet-nav-card.is-selected .sheet-nav-card-name {
+  color: var(--text-normal);
+}
+
+/* Suppress active highlight when a card is selected (avoid double-highlight) */
+.is-selection-mode .sheet-nav-card.is-active:not(.is-selected) {
+  background-color: transparent;
+  box-shadow: none;
+}

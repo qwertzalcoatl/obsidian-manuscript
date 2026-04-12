@@ -57,6 +57,9 @@ class SheetNavigatorView extends ItemView {
   isReordering: boolean;
   headerEl!: HTMLElement;
   listEl!: HTMLElement;
+  exportBtnEl: HTMLElement | null = null;
+  selectedPaths: Set<string> = new Set();
+  isSelectionMode: boolean = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: SheetNavigatorPlugin) {
     super(leaf);
@@ -116,6 +119,12 @@ class SheetNavigatorView extends ItemView {
         if (!this.isReordering) this.renderCurrentFolder();
       })
     );
+
+    this.registerDomEvent(document, 'keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isSelectionMode) {
+        this.exitSelectionMode();
+      }
+    });
 
     this.renderCurrentFolder();
   }
@@ -376,6 +385,7 @@ class SheetNavigatorView extends ItemView {
       cls: "sheet-nav-card sheet-nav-folder-card",
     });
     card.dataset.itemName = folder.name;
+    card.dataset.absPath = folder.path;
 
     if (ordering) {
       const dragHandle = card.createDiv({ cls: "sheet-nav-drag-handle" });
@@ -430,6 +440,7 @@ class SheetNavigatorView extends ItemView {
     });
     card.dataset.path = file.path;
     card.dataset.itemName = file.name;
+    card.dataset.absPath = file.path;
 
     if (ordering) {
       const dragHandle = card.createDiv({ cls: "sheet-nav-drag-handle" });
@@ -630,6 +641,81 @@ class SheetNavigatorView extends ItemView {
       this.currentPath = "/";
     }
     this.renderCurrentFolder();
+  }
+
+  // ─── Selection ───────────────────────────────────────────────────────────
+
+  enterSelectionMode(absPath: string): void {
+    this.isSelectionMode = true;
+    this.selectedPaths.add(absPath);
+    this.updateSelectionUI();
+  }
+
+  exitSelectionMode(): void {
+    this.isSelectionMode = false;
+    this.selectedPaths.clear();
+    this.updateSelectionUI();
+  }
+
+  toggleSelection(absPath: string): void {
+    if (this.selectedPaths.has(absPath)) {
+      this.selectedPaths.delete(absPath);
+    } else {
+      this.selectedPaths.add(absPath);
+    }
+    if (this.selectedPaths.size === 0) {
+      this.isSelectionMode = false;
+    }
+    this.updateSelectionUI();
+  }
+
+  selectRange(targetPath: string): void {
+    if (this.selectedPaths.size === 0) {
+      this.selectedPaths.add(targetPath);
+      this.updateSelectionUI();
+      return;
+    }
+
+    // All visible item paths in visual order
+    const allPaths: string[] = [];
+    this.listEl.querySelectorAll<HTMLElement>('[data-abs-path]').forEach(el => {
+      const p = el.dataset.absPath;
+      if (p) allPaths.push(p);
+    });
+
+    // Anchor = last item added to selection
+    const anchor = [...this.selectedPaths][this.selectedPaths.size - 1];
+    const fromIdx = allPaths.indexOf(anchor);
+    const toIdx = allPaths.indexOf(targetPath);
+
+    if (fromIdx === -1 || toIdx === -1) {
+      this.selectedPaths.add(targetPath);
+    } else {
+      const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+      for (let i = start; i <= end; i++) {
+        this.selectedPaths.add(allPaths[i]);
+      }
+    }
+
+    this.updateSelectionUI();
+  }
+
+  updateSelectionUI(): void {
+    // Update card highlight states
+    this.listEl.querySelectorAll<HTMLElement>('[data-abs-path]').forEach(el => {
+      const p = el.dataset.absPath ?? '';
+      el.classList.toggle('is-selected', this.selectedPaths.has(p));
+    });
+
+    // Update export button dim/active state
+    if (this.exportBtnEl) {
+      const hasSelection = this.selectedPaths.size > 0;
+      this.exportBtnEl.classList.toggle('is-dimmed', !hasSelection);
+      this.exportBtnEl.classList.toggle('is-active', hasSelection);
+    }
+
+    // Update selection mode body class for cursor hint
+    this.containerEl.classList.toggle('is-selection-mode', this.isSelectionMode);
   }
 
   async onClose(): Promise<void> {
