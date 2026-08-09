@@ -4,19 +4,27 @@
 export const PREVIEW_LENGTH = 120;
 
 /**
- * Removes a YAML frontmatter block.
+ * Length of the leading YAML frontmatter block, or 0 when there is none.
  *
- * Anchored to line starts, so an unterminated block is left alone rather than
+ * Anchored to line starts, so an unterminated block measures 0 rather than
  * swallowing the rest of the note. A blank line directly after the opening
  * fence marks a horizontal rule, not frontmatter — real frontmatter always
  * opens straight onto a key.
+ *
+ * Exposed as a length rather than a boolean because critic.ts needs the range
+ * to exclude frontmatter from markup scanning, and one regex beats two.
  */
-export function stripFrontmatter(content: string): string {
-  if (!content.startsWith('---')) return content;
+export function frontmatterLength(content: string): number {
+  if (!content.startsWith('---')) return 0;
   const match = content.match(
     /^---[ \t]*\r?\n(?![ \t]*\r?\n)[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/
   );
-  return match ? content.slice(match[0].length) : content;
+  return match ? match[0].length : 0;
+}
+
+/** Removes a YAML frontmatter block. */
+export function stripFrontmatter(content: string): string {
+  return content.slice(frontmatterLength(content));
 }
 
 /**
