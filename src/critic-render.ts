@@ -1,0 +1,299 @@
+// Inline rendering of editorial markup, in both of Obsidian's display modes.
+//
+// This is load-bearing rather than decorative: with {~~alt~>neu~~} sitting in
+// the prose, an unrendered note looks broken. Both renderers read their
+// geometry from parseCritic's `spans`, so neither can drift from the other or
+// from what the drawer rewrites.
+//
+// The change is shown as the change — struck through for a deletion,
+// underlined for an insertion — rather than as a labelled badge. Text keeps
+// its normal colour throughout; coloured prose is hard to read, and the
+// decoration already carries the meaning.
+
+import { StateField, type EditorState, type Extension } from '@codemirror/state';
+import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
+import { setIcon } from 'obsidian';
+import { parseCritic, type Entry, type Range } from './critic';
+
+/** Cheap reject for the overwhelming majority of notes, which carry no markup. */
+function mightHaveMarkup(text: string): boolean {
+  return text.includes('{') || text.includes('%%') || text.includes('==');
+}
+
+const QUOTE_CLASS: Record<Entry['kind'], string> = {
+  insertion: 'sn-critic-insertion',
+  deletion: 'sn-critic-deletion',
+  substitution: 'sn-critic-deletion',
+  highlight: 'sn-critic-highlight',
+  comment: '',
+};
+
+/**
+ * Screen-reader label. The visual treatment carries this for sighted users —
+ * which is exactly why the cards and decorations carry no type labels of their
+ * own, and why this text has to say what the styling shows.
+ */
+function labelFor(entry: Entry): string {
+  if (entry.kind === 'comment') {
+    return entry.comment ? `Comment: ${entry.comment}` : 'Comment';
+  }
+
+  const what =
+    entry.kind === 'substitution'
+      ? `Suggested replacement: ${entry.quote} becomes ${entry.replacement}`
+      : entry.kind === 'insertion'
+        ? `Suggested insertion: ${entry.quote}`
+        : entry.kind === 'deletion'
+          ? `Suggested deletion: ${entry.quote}`
+          : `Highlighted: ${entry.quote}`;
+
+  return entry.comment ? `${what}. Comment: ${entry.comment}` : what;
+}
+
+const nonEmpty = (r: Range | null): r is Range => r !== null && r.to > r.from;
+
+// ─── Live Preview ───
+
+class CommentGlyph extends WidgetType {
+  constructor(private readonly label: string) {
+    super();
+  }
+
+  eq(other: CommentGlyph): boolean {
+    return other.label === this.label;
+  }
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.className = 'sn-critic-glyph';
+    el.setAttribute('aria-label', this.label);
+    setIcon(el, 'message-square');
+    return el;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+const HIDDEN = Decoration.replace({});
+
+function decorate(entries: Entry[], state: EditorState): DecorationSet {
+  const ranges: { from: number; to: number; value: Decoration }[] = [];
+
+  for (const entry of entries) {
+    // Standard Live Preview behaviour: put the cursor in a construct and its
+    // raw markers come back, so the markup stays editable by hand.
+    const revealed = state.selection.ranges.some(
+      (r) => r.from <= entry.to && r.to >= entry.from
+    );
+
+    const mark = (r: Range | null, cls: string) => {
+      if (!nonEmpty(r) || !cls) return;
+      ranges.push({
+        from: r.from,
+        to: r.to,
+        value: Decoration.mark({ class: cls, attributes: { 'aria-label': labelFor(entry) } }),
+      });
+    };
+
+    mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
+    mark(entry.spans.replacement, 'sn-critic-insertion');
+
+    if (revealed) continue;
+
+    for (const marker of entry.spans.markers) {
+      if (nonEmpty(marker)) ranges.push({ from: marker.from, to: marker.to, value: HIDDEN });
+    }
+    if (nonEmpty(entry.spans.comment)) {
+      ranges.push({
+        from: entry.spans.comment.from,
+        to: entry.spans.comment.to,
+        value: Decoration.replace({ widget: new CommentGlyph(labelFor(entry)) }),
+      });
+    }
+  }
+
+  return Decoration.set(
+    ranges.map((r) => r.value.range(r.from, r.to)),
+    true
+  );
+}
+
+interface CriticValue {
+  entries: Entry[];
+  decorations: DecorationSet;
+}
+
+function build(state: EditorState): CriticValue {
+  const text = state.doc.toString();
+  const entries = mightHaveMarkup(text) ? parseCritic(text) : [];
+  return { entries, decorations: decorate(entries, state) };
+}
+
+/**
+ * The whole document is re-parsed on every edit rather than just the viewport:
+ * deciding whether an offset sits inside a code fence needs the lines above it,
+ * and a scene file is small enough that the honest answer is also the fast one.
+ * Cursor movement reuses the cached parse and only rebuilds decorations.
+ */
+const criticField = StateField.define<CriticValue>({
+  create: build,
+  update(value, tr) {
+    if (tr.docChanged) return build(tr.state);
+    if (tr.selection) return { entries: value.entries, decorations: decorate(value.entries, tr.state) };
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
+});
+
+export function criticEditorExtension(): Extension {
+  return criticField;
+}
+
+// ─── Reading view ───
+
+const BLOCK_TAGS = new Set([
+  'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'BLOCKQUOTE', 'TD', 'TH', 'DT', 'DD', 'DIV',
+]);
+
+interface NodeSpan {
+  node: Text;
+  /** Offset of this node's text within the block's concatenated string. */
+  start: number;
+}
+
+/** The nearest block-level ancestor, so a construct cannot span two paragraphs. */
+function blockOf(node: Node, root: HTMLElement): HTMLElement {
+  let el = node.parentElement;
+  while (el && el !== root && !BLOCK_TAGS.has(el.tagName)) el = el.parentElement;
+  return el ?? root;
+}
+
+/** Text nodes in document order, grouped by block, skipping code. */
+function textNodesByBlock(root: HTMLElement): Map<HTMLElement, Text[]> {
+  const groups = new Map<HTMLElement, Text[]>();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      // Code is not prose; markup inside it is a literal example.
+      if (parent.closest('code, pre, .sn-critic-glyph')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+    const text = n as Text;
+    const block = blockOf(text, root);
+    const list = groups.get(block);
+    if (list) list.push(text);
+    else groups.set(block, [text]);
+  }
+
+  return groups;
+}
+
+/**
+ * Splits a text node so that [start, end) of its content becomes a node of its
+ * own, and returns it. Both splits are conditional so a range covering the
+ * whole node does not create empty siblings.
+ */
+function isolate(node: Text, start: number, end: number): Text {
+  if (end < node.data.length) node.splitText(end);
+  return start > 0 ? node.splitText(start) : node;
+}
+
+/**
+ * The per-node slices a [from, to) range of the block's concatenated text
+ * covers. A construct wrapping other markdown — {++**fett** und kursiv++} —
+ * arrives split across several nodes, which is why this exists at all.
+ */
+function slices(spans: NodeSpan[], from: number, to: number) {
+  const out: { node: Text; start: number; end: number }[] = [];
+  for (const span of spans) {
+    const nodeEnd = span.start + span.node.data.length;
+    if (nodeEnd <= from || span.start >= to) continue;
+    out.push({
+      node: span.node,
+      start: Math.max(0, from - span.start),
+      end: Math.min(span.node.data.length, to - span.start),
+    });
+  }
+  return out;
+}
+
+type Op =
+  | { from: number; to: number; op: 'hide' }
+  | { from: number; to: number; op: 'wrap'; cls: string; label: string }
+  | { from: number; to: number; op: 'glyph'; label: string };
+
+function applyOps(spans: NodeSpan[], ops: Op[]): void {
+  // Right to left, so splitting a node never moves the ranges still to come.
+  for (const op of [...ops].sort((a, b) => b.from - a.from)) {
+    for (const slice of slices(spans, op.from, op.to).reverse()) {
+      if (slice.end <= slice.start) continue;
+      const piece = isolate(slice.node, slice.start, slice.end);
+
+      if (op.op === 'hide') {
+        piece.remove();
+        continue;
+      }
+
+      if (op.op === 'glyph') {
+        const glyph = document.createElement('span');
+        glyph.className = 'sn-critic-glyph';
+        glyph.setAttribute('aria-label', op.label);
+        setIcon(glyph, 'message-square');
+        piece.replaceWith(glyph);
+        continue;
+      }
+
+      const wrapper = document.createElement('span');
+      wrapper.className = op.cls;
+      wrapper.setAttribute('aria-label', op.label);
+      piece.replaceWith(wrapper);
+      wrapper.appendChild(piece);
+    }
+  }
+}
+
+/**
+ * Reading-view renderer. CriticMarkup only, by construction rather than by
+ * choice: Obsidian has already deleted %%comments%% from the DOM and turned
+ * ==text== into a <mark> element by the time a post-processor runs, so the
+ * native forms leave nothing here to find. A native comment staying invisible
+ * in Reading view is exactly how Obsidian behaves without this plugin.
+ */
+export function renderCriticMarkup(root: HTMLElement): void {
+  for (const [, nodes] of textNodesByBlock(root)) {
+    const spans: NodeSpan[] = [];
+    let text = '';
+    for (const node of nodes) {
+      spans.push({ node, start: text.length });
+      text += node.data;
+    }
+
+    if (!mightHaveMarkup(text)) continue;
+
+    const ops: Op[] = [];
+    for (const entry of parseCritic(text)) {
+      const label = labelFor(entry);
+      for (const marker of entry.spans.markers) {
+        if (nonEmpty(marker)) ops.push({ ...marker, op: 'hide' });
+      }
+      if (nonEmpty(entry.spans.quote) && QUOTE_CLASS[entry.kind]) {
+        ops.push({ ...entry.spans.quote, op: 'wrap', cls: QUOTE_CLASS[entry.kind], label });
+      }
+      if (nonEmpty(entry.spans.replacement)) {
+        ops.push({ ...entry.spans.replacement, op: 'wrap', cls: 'sn-critic-insertion', label });
+      }
+      if (nonEmpty(entry.spans.comment)) {
+        ops.push({ ...entry.spans.comment, op: 'glyph', label });
+      }
+    }
+
+    if (ops.length > 0) applyOps(spans, ops);
+  }
+}

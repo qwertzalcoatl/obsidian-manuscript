@@ -222,6 +222,66 @@ describe('parseCritic — code and frontmatter are not markup', () => {
   });
 });
 
+describe('parseCritic — source geometry for the renderers', () => {
+  /** Slices every span out of the source so the offsets are checked, not trusted. */
+  const cut = (src: string, r: { from: number; to: number } | null) =>
+    r === null ? null : src.slice(r.from, r.to);
+
+  it('locates the markers and body of a simple construct', () => {
+    const src = 'Sie {++leise ++}ging.';
+    const { spans } = one(src);
+    expect(spans.markers.map((r) => cut(src, r))).toEqual(['{++', '++}']);
+    expect(cut(src, spans.quote)).toBe('leise ');
+    expect(spans.replacement).toBeNull();
+    expect(spans.comment).toBeNull();
+  });
+
+  it('locates all three marker runs of a substitution', () => {
+    const src = 'Das {~~kalte~>fahle~~} Licht.';
+    const { spans } = one(src);
+    expect(spans.markers.map((r) => cut(src, r))).toEqual(['{~~', '~>', '~~}']);
+    expect(cut(src, spans.quote)).toBe('kalte');
+    expect(cut(src, spans.replacement)).toBe('fahle');
+  });
+
+  it('locates the two-character markers of a native comment', () => {
+    const src = 'Er ging. %%zu schnell%%';
+    const { spans } = one(src);
+    expect(cut(src, spans.comment)).toBe('%%zu schnell%%');
+    expect(spans.quote).toBeNull();
+    expect(spans.markers).toEqual([]);
+  });
+
+  it('locates an attached comment separately from its anchor', () => {
+    const src = 'Sie {==ging==}{>>warum?<<} fort.';
+    const { spans } = one(src);
+    expect(cut(src, spans.quote)).toBe('ging');
+    expect(cut(src, spans.comment)).toBe('{>>warum?<<}');
+    expect(spans.markers.map((r) => cut(src, r))).toEqual(['{==', '==}']);
+  });
+
+  it('locates a native commented highlight', () => {
+    const src = 'Sie ==ging==%%warum?%% fort.';
+    const { spans } = one(src);
+    expect(spans.markers.map((r) => cut(src, r))).toEqual(['==', '==']);
+    expect(cut(src, spans.quote)).toBe('ging');
+    expect(cut(src, spans.comment)).toBe('%%warum?%%');
+  });
+
+  it('covers the entry exactly — markers plus body plus comment, no gaps', () => {
+    const src = '{~~kalte~>fahle~~}{>>c<<}';
+    const e = one(src);
+    const pieces = [...e.spans.markers, e.spans.quote, e.spans.replacement, e.spans.comment]
+      .filter((r): r is { from: number; to: number } => r !== null)
+      .sort((a, b) => a.from - b.from);
+    expect(pieces[0].from).toBe(e.from);
+    expect(pieces[pieces.length - 1].to).toBe(e.to);
+    for (let i = 1; i < pieces.length; i++) {
+      expect(pieces[i].from).toBe(pieces[i - 1].to);
+    }
+  });
+});
+
 describe('applyEntry', () => {
   const run = (src: string, mode: 'accept' | 'reject' | 'resolve') =>
     applyEntry(src, one(src), mode);

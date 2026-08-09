@@ -17,6 +17,30 @@ export type Kind =
 /** What accepting or rejecting an entry does to the document. */
 export type Mode = 'accept' | 'reject' | 'resolve';
 
+export interface Range {
+  from: number;
+  to: number;
+}
+
+/**
+ * Where an entry's pieces sit in the source.
+ *
+ * The parser reports this so Live Preview and Reading view don't each
+ * re-derive marker lengths from the raw text. Two copies of that arithmetic
+ * would eventually disagree, and the disagreement would look like one mode
+ * rendering a note the other one doesn't.
+ */
+export interface Spans {
+  /** Syntax markers to hide: opening, closing, and a substitution's arrow. */
+  markers: Range[];
+  /** The quoted text. Null for a standalone comment, which quotes nothing. */
+  quote: Range | null;
+  /** Substitution only — where the replacement text sits. */
+  replacement: Range | null;
+  /** The whole comment construct, markers included — replaced by a glyph. */
+  comment: Range | null;
+}
+
 /**
  * One reviewable item: a construct plus the comment attached to it, if any.
  *
@@ -41,11 +65,8 @@ export interface Entry {
   line: string;
   /** Came from Obsidian's `%%…%%` rather than CriticMarkup braces. */
   native: boolean;
-}
-
-interface Range {
-  from: number;
-  to: number;
+  /** Source geometry for the inline renderers. */
+  spans: Spans;
 }
 
 interface Raw extends Range {
@@ -53,6 +74,11 @@ interface Raw extends Range {
   quote: string;
   replacement?: string;
   native: boolean;
+  /** Marker runs belonging to this construct alone. */
+  markers: Range[];
+  /** Where `quote` sits — for a comment, where its body sits. */
+  quoteAt: Range;
+  replacementAt?: Range;
 }
 
 // ─── Skip regions ───
@@ -163,6 +189,33 @@ const CRITIC_RE =
 const NATIVE_COMMENT_RE = /%%([\s\S]*?)%%/g;
 const NATIVE_HIGHLIGHT_RE = /==([^\n]+?)==/g;
 
+/**
+ * A construct whose body is one run: everything between a fixed-length opening
+ * and closing marker. Covers every form except a substitution.
+ */
+function simple(
+  kind: Kind,
+  from: number,
+  to: number,
+  body: string,
+  markerLen: number,
+  native: boolean
+): Raw {
+  const bodyFrom = from + markerLen;
+  return {
+    kind,
+    from,
+    to,
+    quote: body,
+    native,
+    markers: [
+      { from, to: bodyFrom },
+      { from: to - markerLen, to },
+    ],
+    quoteAt: { from: bodyFrom, to: to - markerLen },
+  };
+}
+
 function scanCritic(content: string, skip: Range[]): Raw[] {
   const out: Raw[] = [];
   CRITIC_RE.lastIndex = 0;
@@ -173,29 +226,39 @@ function scanCritic(content: string, skip: Range[]): Raw[] {
     if (overlaps(skip, from, to)) continue;
 
     if (m[1] !== undefined) {
-      out.push({ kind: 'insertion', from, to, quote: m[1], native: false });
+      out.push(simple('insertion', from, to, m[1], 3, false));
     } else if (m[2] !== undefined) {
-      out.push({ kind: 'deletion', from, to, quote: m[2], native: false });
+      out.push(simple('deletion', from, to, m[2], 3, false));
     } else if (m[3] !== undefined) {
       // Splits on the first ~>; a body without one is a malformed substitution
       // and is treated as a deletion of exactly what it holds.
       const arrow = m[3].indexOf('~>');
-      out.push(
-        arrow === -1
-          ? { kind: 'deletion', from, to, quote: m[3], native: false }
-          : {
-              kind: 'substitution',
-              from,
-              to,
-              quote: m[3].slice(0, arrow),
-              replacement: m[3].slice(arrow + 2),
-              native: false,
-            }
-      );
+      if (arrow === -1) {
+        out.push(simple('deletion', from, to, m[3], 3, false));
+      } else {
+        const oldFrom = from + 3;
+        const arrowFrom = oldFrom + arrow;
+        const newFrom = arrowFrom + 2;
+        out.push({
+          kind: 'substitution',
+          from,
+          to,
+          quote: m[3].slice(0, arrow),
+          replacement: m[3].slice(arrow + 2),
+          native: false,
+          markers: [
+            { from, to: oldFrom },
+            { from: arrowFrom, to: newFrom },
+            { from: to - 3, to },
+          ],
+          quoteAt: { from: oldFrom, to: arrowFrom },
+          replacementAt: { from: newFrom, to: to - 3 },
+        });
+      }
     } else if (m[4] !== undefined) {
-      out.push({ kind: 'highlight', from, to, quote: m[4], native: false });
+      out.push(simple('highlight', from, to, m[4], 3, false));
     } else {
-      out.push({ kind: 'comment', from, to, quote: '', native: false });
+      out.push(simple('comment', from, to, m[5], 3, false));
     }
   }
 
@@ -214,7 +277,7 @@ function scanNative(content: string, skip: Range[], taken: Range[]): Raw[] {
   ) {
     const to = m.index + m[0].length;
     if (overlaps(blocked, m.index, to)) continue;
-    out.push({ kind: 'comment', from: m.index, to, quote: '', native: true });
+    out.push(simple('comment', m.index, to, m[1], 2, true));
   }
 
   // Highlights are candidates only. A lone ==text== is ordinary Obsidian
@@ -229,20 +292,13 @@ function scanNative(content: string, skip: Range[], taken: Range[]): Raw[] {
   ) {
     const to = m.index + m[0].length;
     if (overlaps(withComments, m.index, to)) continue;
-    out.push({ kind: 'highlight', from: m.index, to, quote: m[1], native: true });
+    out.push(simple('highlight', m.index, to, m[1], 2, true));
   }
 
   return out;
 }
 
 // ─── Parsing ───
-
-/** The comment bodies live inside the markers; strip them to show the text. */
-function commentBody(content: string, raw: Raw): string {
-  const inner = content.slice(raw.from, raw.to);
-  const body = raw.native ? inner.slice(2, -2) : inner.slice(3, -3);
-  return body.trim();
-}
 
 /** The line `offset` sits on, trimmed. */
 function lineAt(content: string, offset: number): string {
@@ -276,9 +332,12 @@ export function parseCritic(content: string): Entry[] {
         from: raw.from,
         to: raw.to,
         quote: '',
-        comment: commentBody(content, raw),
+        comment: raw.quote.trim(),
         line: lineAt(content, raw.from),
         native: raw.native,
+        // The glyph stands in for the whole construct, so its own markers are
+        // not listed separately — they are inside what gets replaced.
+        spans: { markers: [], quote: null, replacement: null, comment: { from: raw.from, to: raw.to } },
       });
       continue;
     }
@@ -298,9 +357,15 @@ export function parseCritic(content: string): Entry[] {
       to: attached ? next.to : raw.to,
       quote: raw.quote,
       ...(raw.replacement !== undefined ? { replacement: raw.replacement } : {}),
-      comment: attached ? commentBody(content, next) : null,
+      comment: attached ? next.quote.trim() : null,
       line: lineAt(content, raw.from),
       native: raw.native,
+      spans: {
+        markers: raw.markers,
+        quote: raw.quoteAt,
+        replacement: raw.replacementAt ?? null,
+        comment: attached ? { from: next.from, to: next.to } : null,
+      },
     });
 
     if (attached) i++;

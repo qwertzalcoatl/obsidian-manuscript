@@ -377,3 +377,47 @@
   font-style: italic;
   text-align: center;
 }
+
+/* ─── Inline editorial markup ───
+   The change is shown as the change, not as a labelled badge: struck through
+   for a deletion, underlined for an insertion. Text keeps its normal colour —
+   coloured prose is hard to read, and the decoration already carries the
+   meaning. Every colour resolves through an Obsidian variable so third-party
+   themes restyle these along with everything else. */
+
+.sn-critic-insertion {
+  border-bottom: 1px solid var(--color-green, #4caf50);
+}
+
+.sn-critic-deletion {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-red, #e05252);
+  text-decoration-thickness: 1px;
+  opacity: 0.6;
+}
+
+.sn-critic-highlight {
+  background-color: color-mix(in srgb, var(--text-accent) 14%, transparent);
+  border-radius: 2px;
+}
+
+/* Stands in for a whole {>>…<<} construct. Sized against the surrounding text
+   rather than a fixed px so it keeps its proportion in any editor font size. */
+.sn-critic-glyph {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  color: var(--text-accent);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.sn-critic-glyph:hover {
+  opacity: 1;
+}
+
+.sn-critic-glyph svg {
+  width: 0.85em;
+  height: 0.85em;
+}
