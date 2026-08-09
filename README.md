@@ -2,7 +2,7 @@
 
 A single-column, drill-down sidebar for [Obsidian](https://obsidian.md) — built for writers who organize novels, screenplays, and long-form projects in folders and numbered files.
 
-Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click to open a scene, shift-click to select for export.
+Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click a scene to open it.
 
 ![Sheet Navigator screenshot](screenshot.png)
 
@@ -16,7 +16,6 @@ Browse your vault one level at a time: chapters show as cards with note counts, 
 - **Right-click context menu** — rename or delete files and folders
 - **Active note highlight** — the currently open note is highlighted in the sidebar
 - **Live updates** — the list refreshes when files are created, renamed, or modified
-- **PDF export** — export any selection of scenes and chapters as a Normseite-formatted PDF
 
 ## How it works
 
@@ -42,28 +41,6 @@ Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dr
 Items **without** a number are left alone — they keep their exact filename and sort to the end of the list. Dragging an unnumbered item into the numbered run is the one action that gives it a number.
 
 Folders and notes are numbered as separate sequences, so dragging a note onto a chapter folder is refused rather than producing two items that share a number.
-
-### PDF export (Normseite)
-
-Select scenes and chapters, then click the export button in the toolbar to export a Normseite-formatted PDF.
-
-**Selecting:**
-- **Click a note** — selects it (highlights it, activates the export button)
-- **Shift-click a note or folder** — adds it to the selection
-- **Escape** — clears the selection
-
-**Exporting:**
-- Click the **↓ export button** in the header toolbar
-- Choose a template (Normseite DE) and click Export
-- A native Save As dialog lets you choose where to save the PDF
-
-Files within the same folder are separated by scene breaks. Different folders produce page breaks between chapters. Markdown headings are converted to formatted LaTeX headings.
-
-**Requirements:** pdflatex and pandoc must be installed.
-- **pdflatex** — part of any TeX distribution: [MacTeX](https://www.tug.org/mactex/), [MiKTeX](https://miktex.org), [TeX Live](https://www.tug.org/texlive/)
-- **pandoc** — ships with the MacTeX full installer; otherwise `brew install pandoc` or [pandoc.org](https://pandoc.org)
-
-Configure paths in **Settings > Sheet Navigator > PDF Export** if the binaries are not on your PATH.
 
 ## Installation
 

@@ -1,6 +1,5 @@
-// Markdown text handling shared by the navigator's card previews and the PDF
-// export. Free of any `obsidian` import so it stays unit-testable under jest's
-// node environment.
+// Markdown text handling behind the navigator's card previews. Free of any
+// `obsidian` import so it stays unit-testable under jest's node environment.
 
 export const PREVIEW_LENGTH = 120;
 

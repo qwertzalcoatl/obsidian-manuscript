@@ -12,10 +12,8 @@ import {
   App,
   FileSystemAdapter,
   Notice,
-  Platform,
   setIcon,
 } from "obsidian";
-import { checkPdflatex, checkPandoc, ExportModal } from "./export";
 import { extractSnippet } from "./text";
 import {
   parseItemName,
@@ -34,16 +32,10 @@ const VIEW_TYPE = "sheet-navigator-view";
 
 interface SheetNavigatorSettings {
   orderingEnabled: boolean;
-  latexExportEnabled: boolean;
-  pdflatexPath: string;
-  pandocPath: string;
 }
 
 const DEFAULT_SETTINGS: SheetNavigatorSettings = {
   orderingEnabled: false,
-  latexExportEnabled: true,
-  pdflatexPath: "pdflatex",
-  pandocPath: "pandoc",
 };
 
 interface HistoryEntry {
@@ -98,8 +90,6 @@ export class SheetNavigatorView extends ItemView {
   isReordering: boolean;
   headerEl!: HTMLElement;
   listEl!: HTMLElement;
-  exportBtnEl: HTMLElement | null = null;
-  selectedPaths: Set<string> = new Set();
 
   /**
    * Bumped by every render. The async preview pass compares against it before
@@ -111,10 +101,6 @@ export class SheetNavigatorView extends ItemView {
   private previewTargets = new Map<string, HTMLElement>();
   /** Scratch-named leftovers we failed to recover — shown rather than hidden. */
   private unrecoverableTempPaths = new Set<string>();
-
-  get isSelectionMode(): boolean {
-    return this.selectedPaths.size > 0;
-  }
 
   constructor(leaf: WorkspaceLeaf, plugin: SheetNavigatorPlugin) {
     super(leaf);
@@ -164,7 +150,6 @@ export class SheetNavigatorView extends ItemView {
 
     this.registerEvent(
       this.app.vault.on("delete", (file) => {
-        this.selectedPaths.delete(file.path);
         if (this.isReordering) return;
         if (this.isCurrentOrAncestor(file.path)) {
           new Notice(`"${file.name}" was deleted — moved up a level.`);
@@ -186,12 +171,6 @@ export class SheetNavigatorView extends ItemView {
         }
       })
     );
-
-    this.registerDomEvent(document, "keydown", (e: KeyboardEvent) => {
-      if (e.key === "Escape" && this.isSelectionMode) {
-        this.exitSelectionMode();
-      }
-    });
 
     this.render();
   }
@@ -260,8 +239,7 @@ export class SheetNavigatorView extends ItemView {
 
   /**
    * Rewrites every tracked path after a rename. Without this the view loses the
-   * folder it is sitting in, `history` keeps dead entries, and the selection
-   * silently drops items that were only renamed.
+   * folder it is sitting in and `history` keeps dead entries.
    */
   private remapPaths(oldPath: string, newPath: string): boolean {
     const remap = (p: string): string | null => {
@@ -284,14 +262,6 @@ export class SheetNavigatorView extends ItemView {
       changed = true;
       return { path: toViewPath(next), name: basenameOf(next) || "Vault" };
     });
-
-    for (const selected of [...this.selectedPaths]) {
-      const next = remap(selected);
-      if (next === null) continue;
-      this.selectedPaths.delete(selected);
-      this.selectedPaths.add(next);
-      changed = true;
-    }
 
     return changed;
   }
@@ -345,7 +315,6 @@ export class SheetNavigatorView extends ItemView {
 
     try {
       folder = this.resolveCurrentFolder();
-      this.pruneSelection();
 
       const children = this.sortChildren(folder);
       const scrollTop = this.listEl.scrollTop;
@@ -377,7 +346,6 @@ export class SheetNavigatorView extends ItemView {
       this.listEl.scrollTop = scrollTop;
 
       this.highlightActive();
-      this.updateSelectionUI();
     } catch (err) {
       this.renderErrorState(err);
       return;
@@ -423,26 +391,6 @@ export class SheetNavigatorView extends ItemView {
     });
     setIcon(newBtn, "file-plus");
     newBtn.addEventListener("click", () => void this.createNewNote());
-
-    if (Platform.isDesktop && this.plugin.settings.latexExportEnabled) {
-      const exportBtn = toolbar.createDiv({
-        cls: "sheet-nav-toolbar-btn sheet-nav-export-btn is-dimmed",
-        attr: { "aria-label": "Export to PDF" },
-      });
-      setIcon(exportBtn, "download");
-      this.exportBtnEl = exportBtn;
-
-      exportBtn.addEventListener("click", () => {
-        if (!Platform.isDesktop || !this.plugin.settings.latexExportEnabled) return;
-        if (this.selectedPaths.size === 0) {
-          new Notice("Click a note to select it, shift-click to add more.");
-          return;
-        }
-        new ExportModal(this.app, this.plugin, this, new Set(this.selectedPaths)).open();
-      });
-    } else {
-      this.exportBtnEl = null;
-    }
   }
 
   /**
@@ -473,7 +421,6 @@ export class SheetNavigatorView extends ItemView {
   private buildFolderCard(folder: TFolder): HTMLElement {
     const ordering = this.plugin.settings.orderingEnabled;
     const card = createDiv({ cls: "sheet-nav-card sheet-nav-folder-card" });
-    card.dataset.absPath = folder.path;
 
     if (ordering) card.createDiv({ cls: "sheet-nav-drag-handle" }).setText("⠿");
 
@@ -502,13 +449,7 @@ export class SheetNavigatorView extends ItemView {
     const chevron = card.createDiv({ cls: "sheet-nav-chevron" });
     chevron.setText("›");
 
-    card.addEventListener("click", (e: MouseEvent) => {
-      if (e.shiftKey) {
-        this.toggleSelection(folder.path);
-        return;
-      }
-      this.drillInto(folder);
-    });
+    card.addEventListener("click", () => this.drillInto(folder));
     chevron.addEventListener("click", (e: MouseEvent) => {
       e.stopPropagation();
       this.drillInto(folder);
@@ -524,7 +465,6 @@ export class SheetNavigatorView extends ItemView {
     const ordering = this.plugin.settings.orderingEnabled;
     const card = createDiv({ cls: "sheet-nav-card sheet-nav-file-card" });
     card.dataset.path = file.path;
-    card.dataset.absPath = file.path;
 
     if (ordering) card.createDiv({ cls: "sheet-nav-drag-handle" }).setText("⠿");
 
@@ -546,14 +486,7 @@ export class SheetNavigatorView extends ItemView {
     const previewEl = content.createDiv({ cls: "sheet-nav-card-preview" });
     this.previewTargets.set(file.path, previewEl);
 
-    card.addEventListener("click", (e: MouseEvent) => {
-      if (e.shiftKey) {
-        this.toggleSelection(file.path);
-        return;
-      }
-      this.selectedPaths.clear();
-      this.selectedPaths.add(file.path);
-      this.updateSelectionUI();
+    card.addEventListener("click", () => {
       void this.app.workspace.openLinkText(file.path, "", false);
     });
 
@@ -938,7 +871,6 @@ export class SheetNavigatorView extends ItemView {
   }
 
   drillInto(folder: TFolder): void {
-    if (this.isSelectionMode) this.exitSelectionMode();
     this.history.push({
       path: this.currentPath,
       name: this.getFolderByPath(this.currentPath)?.name || "Vault",
@@ -948,52 +880,12 @@ export class SheetNavigatorView extends ItemView {
   }
 
   goUp(): void {
-    if (this.isSelectionMode) this.exitSelectionMode();
     if (this.history.length > 0) {
       this.currentPath = this.history.pop()!.path;
     } else {
       this.currentPath = toViewPath(parentOf(toVaultPath(this.currentPath)));
     }
     this.render();
-  }
-
-  // ─── Selection ───
-
-  exitSelectionMode(): void {
-    this.selectedPaths.clear();
-    this.updateSelectionUI();
-  }
-
-  toggleSelection(absPath: string): void {
-    if (this.selectedPaths.has(absPath)) {
-      this.selectedPaths.delete(absPath);
-    } else {
-      this.selectedPaths.add(absPath);
-    }
-    this.updateSelectionUI();
-  }
-
-  /** Drops selections whose file is gone, so an export cannot silently shrink. */
-  private pruneSelection(): void {
-    if (this.isReordering) return; // mid-rename nothing resolves; remapPaths handles it
-    for (const path of [...this.selectedPaths]) {
-      if (!this.app.vault.getAbstractFileByPath(path)) this.selectedPaths.delete(path);
-    }
-  }
-
-  updateSelectionUI(): void {
-    this.listEl.querySelectorAll<HTMLElement>("[data-abs-path]").forEach((el) => {
-      const path = el.dataset.absPath ?? "";
-      el.classList.toggle("is-selected", this.selectedPaths.has(path));
-    });
-
-    if (this.exportBtnEl) {
-      const hasSelection = this.selectedPaths.size > 0;
-      this.exportBtnEl.classList.toggle("is-dimmed", !hasSelection);
-      this.exportBtnEl.classList.toggle("is-active", hasSelection);
-    }
-
-    this.containerEl.classList.toggle("is-selection-mode", this.isSelectionMode);
   }
 }
 
@@ -1018,8 +910,6 @@ function tempToken(): string {
 
 class SheetNavigatorSettingTab extends PluginSettingTab {
   plugin: SheetNavigatorPlugin;
-  private pdflatexTimer: ReturnType<typeof setTimeout> | null = null;
-  private pandocTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: App, plugin: SheetNavigatorPlugin) {
     super(app, plugin);
@@ -1049,112 +939,6 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
             }
           })
       );
-
-    if (!Platform.isDesktop) return;
-
-    containerEl.createEl("h3", { text: "PDF Export" });
-
-    new Setting(containerEl)
-      .setName("Enable PDF export")
-      .setDesc("Export selected folders and notes to a Normseite-formatted PDF.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.latexExportEnabled)
-          .onChange(async (value) => {
-            this.plugin.settings.latexExportEnabled = value;
-            await this.plugin.saveSettings();
-            this.display();
-          })
-      );
-
-    if (!this.plugin.settings.latexExportEnabled) return;
-
-    containerEl.createEl("p", {
-      cls: "sn-pdf-requirement-note",
-      text: "Requires two external tools:",
-    });
-    const reqList = containerEl.createEl("ul", { cls: "sn-pdf-requirement-note" });
-    reqList
-      .createEl("li")
-      .createEl("span")
-      .setText("pdflatex — part of any TeX distribution (MacTeX, MiKTeX, TeX Live)");
-    const pandocLi = reqList.createEl("li");
-    pandocLi
-      .createEl("span")
-      .setText("pandoc — ships with the MacTeX full installer; otherwise ");
-    pandocLi.createEl("code").setText("brew install pandoc");
-    pandocLi.createEl("span").setText(" or pandoc.org");
-
-    new Setting(containerEl)
-      .setName("pdflatex path")
-      .setDesc('Full path, or just "pdflatex" if it is on your PATH.')
-      .addText((text) => {
-        text.setValue(this.plugin.settings.pdflatexPath);
-        text.onChange(async (value) => {
-          this.plugin.settings.pdflatexPath = value.trim() || "pdflatex";
-          await this.plugin.saveSettings();
-          this.validateBinary(
-            "pdflatex",
-            this.plugin.settings.pdflatexPath,
-            checkPdflatex,
-            pdflatexStatusEl
-          );
-        });
-      });
-    const pdflatexStatusEl = containerEl.createDiv({ cls: "sn-pdflatex-status" });
-    this.validateBinary(
-      "pdflatex",
-      this.plugin.settings.pdflatexPath,
-      checkPdflatex,
-      pdflatexStatusEl
-    );
-
-    new Setting(containerEl)
-      .setName("pandoc path")
-      .setDesc('Full path, or just "pandoc" if it is on your PATH.')
-      .addText((text) => {
-        text.setValue(this.plugin.settings.pandocPath);
-        text.onChange(async (value) => {
-          this.plugin.settings.pandocPath = value.trim() || "pandoc";
-          await this.plugin.saveSettings();
-          this.validateBinary(
-            "pandoc",
-            this.plugin.settings.pandocPath,
-            checkPandoc,
-            pandocStatusEl
-          );
-        });
-      });
-    const pandocStatusEl = containerEl.createDiv({ cls: "sn-pdflatex-status" });
-    this.validateBinary(
-      "pandoc",
-      this.plugin.settings.pandocPath,
-      checkPandoc,
-      pandocStatusEl
-    );
-  }
-
-  private validateBinary(
-    name: string,
-    pathToCheck: string,
-    checkFn: (p: string) => boolean,
-    statusEl: HTMLElement
-  ): void {
-    const timerKey = name === "pandoc" ? "pandocTimer" : "pdflatexTimer";
-    if (this[timerKey] !== null) {
-      clearTimeout(this[timerKey]!);
-      this[timerKey] = null;
-    }
-    statusEl.setText("Checking…");
-    statusEl.className = "sn-pdflatex-status";
-    this[timerKey] = setTimeout(() => {
-      this[timerKey] = null;
-      const found = checkFn(pathToCheck);
-      statusEl.setText(found ? `✓ ${name} found` : `✗ Not found`);
-      statusEl.className = `sn-pdflatex-status ${
-        found ? "sn-pdflatex-found" : "sn-pdflatex-missing"
-      }`;
-    }, 0);
   }
 }
 
