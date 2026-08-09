@@ -26,7 +26,7 @@ The navigator shows the contents of the current folder. Folders appear as chapte
 
 ### Filename-based ordering
 
-Files and folders are sorted naturally by name. Use numeric prefixes to control order:
+Numbered items come first in numeric order, then everything else alphabetically. Use numeric prefixes to control order:
 
 ```
 1 – Prolog.md
@@ -37,7 +37,11 @@ Files and folders are sorted naturally by name. Use numeric prefixes to control 
 
 ### Drag-and-drop reordering
 
-Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dragging and dropping renumbers all items in the current folder sequentially (1, 2, 3…), preserving titles and separators.
+Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dragging and dropping renumbers the folder sequentially (1, 2, 3…), preserving each item's title and its choice of separator.
+
+Items **without** a number are left alone — they keep their exact filename and sort to the end of the list. Dragging an unnumbered item into the numbered run is the one action that gives it a number.
+
+Folders and notes are numbered as separate sequences, so dragging a note onto a chapter folder is refused rather than producing two items that share a number.
 
 ### PDF export (Normseite)
 

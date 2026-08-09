@@ -5,6 +5,7 @@ import * as path from 'path';
 import { App, Modal, Notice, Setting, TFile, TFolder } from 'obsidian';
 import type SheetNavigatorPlugin from './main';
 import type { SheetNavigatorView } from './main';
+import { stripFrontmatter } from './text';
 
 // Minimal type for @electron/remote (provided by Obsidian at runtime, not installed)
 interface ElectronRemote {
@@ -72,13 +73,8 @@ export function escapeLatex(text: string): string {
 }
 
 export function stripMarkdown(content: string): string {
-  let text = content;
-
-  // Strip YAML frontmatter (handles --- inside YAML values)
-  if (text.startsWith('---')) {
-    const match = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-    if (match) text = text.slice(match[0].length).trimStart();
-  }
+  // Frontmatter handling is shared with the navigator's card previews.
+  let text = stripFrontmatter(content).trimStart();
 
   // Strip fenced code blocks before other processing (consume surrounding newlines too)
   text = text.replace(/\n?```[\s\S]*?```\n?/g, '\n');

@@ -202,10 +202,17 @@
   bottom: 15%;
 }
 
-/* Chapter number */
+/* Chapter number.
+   The slot is rendered on every folder card, empty when there is no number, so
+   titles line up in a folder that mixes numbered and unnumbered items. Its
+   width follows the widest number present and is clamped at both ends, so
+   "100" does not wrap and one odd name cannot squeeze every title. */
 .sheet-nav-chapter-num {
   flex-shrink: 0;
-  width: 32px;
+  width: clamp(32px, calc(var(--sn-folder-num-chars, 1) * 1ch + 4px), 6.5ch);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
   font-size: 22px;
   font-weight: 200;
   line-height: 1;
@@ -216,6 +223,12 @@
   padding-top: 1px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/* Nobody in this folder uses numbers — drop the column rather than indent
+   every card against an empty gutter. */
+.sheet-nav-list[data-folder-nums="none"] .sheet-nav-chapter-num {
+  display: none;
 }
 
 .sheet-nav-folder-card:hover .sheet-nav-chapter-num {
@@ -301,10 +314,13 @@
   bottom: 10%;
 }
 
-/* File number */
+/* File number — see .sheet-nav-chapter-num for the sizing rationale. */
 .sheet-nav-file-num {
   flex-shrink: 0;
-  width: 22px;
+  width: clamp(22px, calc(var(--sn-file-num-chars, 1) * 1ch + 4px), 6.5ch);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
   font-size: 15px;
   font-weight: 200;
   line-height: 1;
@@ -315,6 +331,10 @@
   padding-top: 2px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+.sheet-nav-list[data-file-nums="none"] .sheet-nav-file-num {
+  display: none;
 }
 
 .sheet-nav-file-card:hover .sheet-nav-file-num {
@@ -342,10 +362,31 @@
   font-size: 11.5px;
   color: var(--text-faint);
   line-height: 1.5;
+  /* Reserved even when empty so an empty note's card matches its neighbours
+     and nothing shifts when the preview text arrives. */
+  min-height: 1.5em;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* A note named only for its number, e.g. "3.md" — the badge already shows the
+   number, so the title slot carries a placeholder instead of repeating it. */
+.sheet-nav-card-title.is-untitled,
+.sheet-nav-card-name.is-untitled {
+  color: var(--text-faint);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ─── Empty state ─── */
+.sheet-nav-empty {
+  padding: 18px 12px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-style: italic;
+  text-align: center;
 }
 
 /* ─── Settings: binary status ─── */
