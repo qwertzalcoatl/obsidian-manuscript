@@ -94,6 +94,7 @@ The four wrapping commands are also on the editor's right-click menu. Nothing in
 
 - A mark may wrap across a soft line break but not across a blank line, so there are no multi-paragraph anchors. This also stops a stray `{++` from swallowing the rest of the note when it eventually meets a `++}`.
 - Marks do not nest. `{==a {==b==} c==}` closes at the first `==}`.
+- **Accept all** / **Reject all** rewrite everything between the first and last mark in one edit, so the cursor can move if it was sitting between them. Deciding marks one at a time leaves the cursor exactly where it was.
 - `{--alt--}{++neu++}` is read as two separate marks, not as one substitution. Use `{~~alt~>neu~~}` for that.
 - Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
 - In Reading view, only CriticMarkup renders. Obsidian removes `%%comments%%` from the page before any plugin can see them, so those stay invisible there — exactly as they are without this plugin.
