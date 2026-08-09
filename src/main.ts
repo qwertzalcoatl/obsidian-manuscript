@@ -11,10 +11,15 @@ import {
   PluginSettingTab,
   App,
   FileSystemAdapter,
+  MarkdownView,
+  Editor,
   Notice,
   setIcon,
 } from "obsidian";
 import { extractSnippet } from "./text";
+import { parseCritic, renderAccepted, renderRejected } from "./critic";
+import { criticEditorExtension, renderCriticMarkup } from "./critic-render";
+import { ReviewView, VIEW_TYPE_REVIEW } from "./review-view";
 import {
   parseItemName,
   displayTitle,
@@ -32,10 +37,12 @@ const VIEW_TYPE = "sheet-navigator-view";
 
 interface SheetNavigatorSettings {
   orderingEnabled: boolean;
+  reviewEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: SheetNavigatorSettings = {
   orderingEnabled: false,
+  reviewEnabled: true,
 };
 
 interface HistoryEntry {
@@ -98,9 +105,18 @@ export class SheetNavigatorView extends ItemView {
    */
   private renderSeq = 0;
   private queuedRender: number | null = null;
-  private previewTargets = new Map<string, HTMLElement>();
+  private previewTargets = new Map<string, { preview: HTMLElement; badge: HTMLElement }>();
   /** Scratch-named leftovers we failed to recover — shown rather than hidden. */
   private unrecoverableTempPaths = new Set<string>();
+
+  /**
+   * Open markup in the active sheet, for the toolbar button's badge.
+   *
+   * A plain field rather than something the button owns: renderHeader runs on
+   * every vault event, so the button element is destroyed and rebuilt
+   * constantly. A cachedRead resolving later would write into a detached node.
+   */
+  private activeMarkupCount = 0;
 
   constructor(leaf: WorkspaceLeaf, plugin: SheetNavigatorPlugin) {
     super(leaf);
@@ -129,7 +145,10 @@ export class SheetNavigatorView extends ItemView {
     this.listEl = this.containerEl.createDiv({ cls: "sheet-nav-list" });
 
     this.registerEvent(
-      this.app.workspace.on("file-open", () => this.highlightActive())
+      this.app.workspace.on("file-open", () => {
+        this.highlightActive();
+        void this.refreshActiveMarkupCount();
+      })
     );
 
     // A modify touches one note's text, never the folder's structure — repaint
@@ -391,6 +410,40 @@ export class SheetNavigatorView extends ItemView {
     });
     setIcon(newBtn, "file-plus");
     newBtn.addEventListener("click", () => void this.createNewNote());
+
+    if (!this.plugin.settings.reviewEnabled) return;
+
+    const count = this.activeMarkupCount;
+    const reviewBtn = toolbar.createDiv({
+      cls: `sheet-nav-toolbar-btn sheet-nav-review-btn${count > 0 ? " is-active" : " is-dimmed"}`,
+      attr: {
+        "aria-label": count > 0 ? `Review (${count})` : "Review — nothing marked up",
+      },
+    });
+    setIcon(reviewBtn, "message-square-quote");
+    if (count > 0) {
+      reviewBtn.createSpan({ cls: "sheet-nav-review-count" }).setText(String(count));
+    }
+    reviewBtn.addEventListener("click", () => void this.plugin.activateReviewView());
+  }
+
+  /** Re-reads the active sheet's markup count and repaints the toolbar badge. */
+  async refreshActiveMarkupCount(): Promise<void> {
+    if (!this.plugin.settings.reviewEnabled) return;
+
+    const file = this.app.workspace.getActiveFile();
+    let next = 0;
+    if (file && file.extension === "md") {
+      try {
+        next = parseCritic(await this.app.vault.cachedRead(file)).length;
+      } catch {
+        next = 0;
+      }
+    }
+
+    if (next === this.activeMarkupCount) return;
+    this.activeMarkupCount = next;
+    this.requestRender();
   }
 
   /**
@@ -478,13 +531,18 @@ export class SheetNavigatorView extends ItemView {
     // displayTitle never echoes the number the badge already shows, so a note
     // named "3.md" no longer renders "3" twice.
     const label = displayTitle(parsed);
-    const titleEl = content.createDiv({ cls: "sheet-nav-card-title" });
+    const titleLine = content.createDiv({ cls: "sheet-nav-title-line" });
+    const titleEl = titleLine.createDiv({ cls: "sheet-nav-card-title" });
     titleEl.setText(label.text);
     if (label.isUntitled) titleEl.addClass("is-untitled");
 
+    // Filled by the preview pass, which already reads this file — an empty
+    // badge collapses, so a note with no markup shows nothing.
+    const badgeEl = titleLine.createDiv({ cls: "sheet-nav-card-badge" });
+
     // Always created, even for an empty note, so card heights stay uniform.
     const previewEl = content.createDiv({ cls: "sheet-nav-card-preview" });
-    this.previewTargets.set(file.path, previewEl);
+    this.previewTargets.set(file.path, { preview: previewEl, badge: badgeEl });
 
     card.addEventListener("click", () => {
       void this.app.workspace.openLinkText(file.path, "", false);
@@ -499,16 +557,38 @@ export class SheetNavigatorView extends ItemView {
 
   // ─── Previews (async tail) ───
 
+  /**
+   * A card's preview text and markup count from one read.
+   *
+   * Editorial markup is resolved to its accepted form first, so a scene whose
+   * opening sentence carries a comment previews as prose rather than as braces.
+   */
+  private summarise(content: string): { text: string; count: number } {
+    return {
+      text: extractSnippet(renderAccepted(content)),
+      count: this.plugin.settings.reviewEnabled ? parseCritic(content).length : 0,
+    };
+  }
+
+  private paintBadge(el: HTMLElement, count: number): void {
+    el.empty();
+    el.toggleClass("is-visible", count > 0);
+    if (count === 0) return;
+    setIcon(el, "message-square");
+    el.createSpan().setText(String(count));
+    el.setAttribute("aria-label", `${count} open in review`);
+  }
+
   private async fillPreviews(seq: number): Promise<void> {
     const targets = [...this.previewTargets.entries()];
     if (targets.length === 0) return;
 
-    const snippets = await Promise.all(
-      targets.map(async ([path, el]) => {
+    const summaries = await Promise.all(
+      targets.map(async ([path, els]) => {
         const file = this.app.vault.getAbstractFileByPath(path);
         if (!(file instanceof TFile)) return null;
         try {
-          return { el, text: extractSnippet(await this.app.vault.cachedRead(file)) };
+          return { els, ...this.summarise(await this.app.vault.cachedRead(file)) };
         } catch {
           return null;
         }
@@ -516,23 +596,26 @@ export class SheetNavigatorView extends ItemView {
     );
 
     if (seq !== this.renderSeq) return; // a newer render owns the DOM now
-    for (const snippet of snippets) {
-      if (snippet) snippet.el.setText(snippet.text);
+    for (const summary of summaries) {
+      if (!summary) continue;
+      summary.els.preview.setText(summary.text);
+      this.paintBadge(summary.els.badge, summary.count);
     }
   }
 
   private async updateCardPreview(file: TFile): Promise<void> {
-    const el = this.previewTargets.get(file.path);
-    if (!el) return;
+    const els = this.previewTargets.get(file.path);
+    if (!els) return;
     const seq = this.renderSeq;
-    let text: string;
+    let summary: { text: string; count: number };
     try {
-      text = extractSnippet(await this.app.vault.cachedRead(file));
+      summary = this.summarise(await this.app.vault.cachedRead(file));
     } catch {
       return;
     }
     if (seq !== this.renderSeq) return;
-    el.setText(text);
+    els.preview.setText(summary.text);
+    this.paintBadge(els.badge, summary.count);
   }
 
   // ─── Drag and drop ───
@@ -939,6 +1022,20 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
             }
           })
       );
+
+    new Setting(containerEl)
+      .setName("Enable review")
+      .setDesc(
+        "Render CriticMarkup inline and list it in the Review drawer. Turning this off leaves the markup as plain text."
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.reviewEnabled).onChange(async (value) => {
+          this.plugin.settings.reviewEnabled = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+          new Notice("Reload Obsidian to finish applying this change.");
+        })
+      );
   }
 }
 
@@ -1000,6 +1097,55 @@ class RenameModal extends Modal {
   }
 }
 
+/** Asks what the selected text should become, for a `{~~alt~>neu~~}`. */
+class ReplaceModal extends Modal {
+  constructor(
+    app: App,
+    private original: string,
+    private onSubmitCb: (replacement: string) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.createEl("h3", { text: "Replace with" });
+    contentEl.createEl("p", { cls: "sn-replace-original", text: this.original });
+
+    let replacement = this.original;
+    const submit = () => {
+      this.close();
+      const trimmed = replacement.trim();
+      if (trimmed && trimmed !== this.original) this.onSubmitCb(trimmed);
+    };
+
+    new Setting(contentEl).setName("New text").addText((text) => {
+      text.setValue(this.original);
+      text.onChange((value) => {
+        replacement = value;
+      });
+      window.setTimeout(() => {
+        text.inputEl.focus();
+        text.inputEl.select();
+      }, 10);
+      text.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      });
+    });
+
+    new Setting(contentEl)
+      .addButton((btn) => btn.setButtonText("Suggest").setCta().onClick(submit))
+      .addButton((btn) => btn.setButtonText("Cancel").onClick(() => this.close()));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 /** Replaces window.confirm(), which blocks the renderer. */
 class ConfirmModal extends Modal {
   constructor(
@@ -1044,6 +1190,7 @@ export default class SheetNavigatorPlugin extends Plugin {
     await this.loadSettings();
 
     this.registerView(VIEW_TYPE, (leaf) => new SheetNavigatorView(leaf, this));
+    this.registerView(VIEW_TYPE_REVIEW, (leaf) => new ReviewView(leaf));
 
     this.addSettingTab(new SheetNavigatorSettingTab(this.app, this));
 
@@ -1056,6 +1203,8 @@ export default class SheetNavigatorPlugin extends Plugin {
       name: "Open Sheet Navigator",
       callback: () => void this.activateView(),
     });
+
+    if (this.settings.reviewEnabled) this.loadReview();
 
     this.addCommand({
       id: "new-note-in-current-folder",
@@ -1070,6 +1219,158 @@ export default class SheetNavigatorPlugin extends Plugin {
         return false;
       },
     });
+  }
+
+  // ─── Review ───
+
+  /**
+   * Rendering, commands and the context menu, all behind the one setting.
+   *
+   * Registered once at load rather than checked at each call site: an editor
+   * extension cannot be unregistered, which is why flipping the toggle asks
+   * for a reload rather than pretending to take effect immediately.
+   */
+  private loadReview(): void {
+    this.registerEditorExtension(criticEditorExtension());
+    this.registerMarkdownPostProcessor((el) => renderCriticMarkup(el));
+
+    this.addCommand({
+      id: "open-review-panel",
+      name: "Open review panel",
+      callback: () => void this.activateReviewView(),
+    });
+
+    this.addCommand({
+      id: "comment-on-selection",
+      name: "Comment on selection",
+      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "m" }],
+      editorCheckCallback: (checking, editor) => {
+        if (!editor.somethingSelected()) return false;
+        if (!checking) void this.wrapSelection(editor, "comment");
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "suggest-deletion",
+      name: "Suggest deletion",
+      editorCheckCallback: (checking, editor) => {
+        if (!editor.somethingSelected()) return false;
+        if (!checking) void this.wrapSelection(editor, "deletion");
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "highlight-selection",
+      name: "Highlight selection",
+      editorCheckCallback: (checking, editor) => {
+        if (!editor.somethingSelected()) return false;
+        if (!checking) void this.wrapSelection(editor, "highlight");
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "suggest-replacement",
+      name: "Replace with…",
+      editorCheckCallback: (checking, editor) => {
+        if (!editor.somethingSelected()) return false;
+        if (!checking) {
+          new ReplaceModal(this.app, editor.getSelection(), (replacement) => {
+            const selection = editor.getSelection();
+            editor.replaceSelection(`{~~${selection}~>${replacement}~~}`);
+            void this.activateReviewView();
+          }).open();
+        }
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "accept-all-markup",
+      name: "Accept all markup in this note",
+      editorCallback: (editor) => this.resolveAll(editor, renderAccepted),
+    });
+
+    this.addCommand({
+      id: "reject-all-markup",
+      name: "Reject all markup in this note",
+      editorCallback: (editor) => this.resolveAll(editor, renderRejected),
+    });
+
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor) => {
+        if (!editor.somethingSelected()) return;
+        menu.addSeparator();
+        menu.addItem((item) =>
+          item
+            .setTitle("Comment on selection")
+            .setIcon("message-square-quote")
+            .onClick(() => void this.wrapSelection(editor, "comment"))
+        );
+        menu.addItem((item) =>
+          item
+            .setTitle("Suggest deletion")
+            .setIcon("strikethrough")
+            .onClick(() => void this.wrapSelection(editor, "deletion"))
+        );
+        menu.addItem((item) =>
+          item
+            .setTitle("Highlight selection")
+            .setIcon("highlighter")
+            .onClick(() => void this.wrapSelection(editor, "highlight"))
+        );
+      })
+    );
+  }
+
+  /**
+   * Wraps the selection in markup and opens the drawer.
+   *
+   * For a comment the cursor lands between the `{>>` and `<<}` so the note can
+   * be typed straight into the manuscript — the drawer is for reviewing, the
+   * editor is for writing.
+   */
+  private async wrapSelection(
+    editor: Editor,
+    kind: "comment" | "deletion" | "highlight"
+  ): Promise<void> {
+    const selection = editor.getSelection();
+    if (!selection) return;
+
+    const start = editor.posToOffset(editor.getCursor("from"));
+
+    if (kind === "deletion") {
+      editor.replaceSelection(`{--${selection}--}`);
+    } else if (kind === "highlight") {
+      editor.replaceSelection(`{==${selection}==}`);
+    } else {
+      const anchor = `{==${selection}==}`;
+      editor.replaceSelection(`${anchor}{>><<}`);
+      // Just past the `{>>`, so the note can be typed immediately.
+      editor.setCursor(editor.offsetToPos(start + anchor.length + 3));
+    }
+
+    await this.activateReviewView(false);
+  }
+
+  private resolveAll(editor: Editor, transform: (content: string) => string): void {
+    const content = editor.getValue();
+    const next = transform(content);
+    if (next === content) {
+      new Notice("No markup in this note.");
+      return;
+    }
+    editor.replaceRange(next, editor.offsetToPos(0), editor.offsetToPos(content.length));
+  }
+
+  /** Repaints both views after a settings change. */
+  refreshViews(): void {
+    this.getActiveSheetView()?.requestRender();
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)) {
+      if (leaf.view instanceof ReviewView) leaf.view.refresh();
+    }
   }
 
   getActiveSheetView(): SheetNavigatorView | null {
@@ -1101,6 +1402,32 @@ export default class SheetNavigatorPlugin extends Plugin {
     if (leaf) {
       workspace.revealLeaf(leaf);
     }
+  }
+
+  /**
+   * Opens the Review drawer in the right sidebar.
+   *
+   * `focus` is false when a command created markup: the caret should stay in
+   * the manuscript so the comment can be typed, with the drawer merely visible.
+   */
+  async activateReviewView(focus = true): Promise<void> {
+    const { workspace } = this.app;
+
+    // Captured before revealing, so focus goes back to the exact editor the
+    // caret was in rather than to whichever leaf happens to be most recent.
+    const editorLeaf = focus ? null : workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null;
+
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_REVIEW)[0];
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (!rightLeaf) return;
+      await rightLeaf.setViewState({ type: VIEW_TYPE_REVIEW, active: true });
+      leaf = rightLeaf;
+    }
+
+    await workspace.revealLeaf(leaf);
+    if (leaf.view instanceof ReviewView) leaf.view.requestRefresh();
+    if (editorLeaf) workspace.setActiveLeaf(editorLeaf, { focus: true });
   }
 
   onunload(): void {}
