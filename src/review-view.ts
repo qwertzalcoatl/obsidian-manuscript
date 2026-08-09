@@ -17,6 +17,7 @@ import {
 } from 'obsidian';
 import {
   applyEntry,
+  minimalEdit,
   parseCritic,
   renderAccepted,
   renderRejected,
@@ -349,7 +350,7 @@ export class ReviewView extends ItemView {
     }
 
     this.collapse(cardEl);
-    this.writeWholeDocument(view, content, next);
+    this.write(view, content, next);
   }
 
   private showBulkMenu(e: MouseEvent): void {
@@ -391,17 +392,24 @@ export class ReviewView extends ItemView {
       return;
     }
 
-    this.writeWholeDocument(view, content, next);
+    this.write(view, content, next);
     new Notice('Markup resolved. Undo with ' + (Platform.isMacOS ? '⌘Z' : 'Ctrl+Z') + '.');
   }
 
   /**
-   * One replaceRange over the whole document rather than setValue, so the
-   * rewrite is a single undoable step and the cursor survives.
+   * Writes a transform result back as one narrow replacement.
+   *
+   * Replacing the whole document would be simpler and is what this used to do,
+   * but CodeMirror maps the caret through the change and a [0, len) replace
+   * sends it to offset 0 — so accepting one comment threw the writer to the
+   * top of the scene. Narrowing to the bytes that moved keeps the caret,
+   * selection and scroll in place, and still lands as a single undo step.
    */
-  private writeWholeDocument(view: MarkdownView, before: string, after: string): void {
+  private write(view: MarkdownView, before: string, after: string): void {
+    const edit = minimalEdit(before, after);
+    if (!edit) return;
     const { editor } = view;
-    editor.replaceRange(after, editor.offsetToPos(0), editor.offsetToPos(before.length));
+    editor.replaceRange(edit.text, editor.offsetToPos(edit.from), editor.offsetToPos(edit.to));
     this.requestRefresh();
   }
 

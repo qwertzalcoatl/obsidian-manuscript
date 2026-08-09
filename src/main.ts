@@ -213,10 +213,19 @@ export class SheetNavigatorView extends ItemView {
     );
 
     this.render();
+
+    // Seeded here as well as on file-open: opening the navigator while a note
+    // is already active fires no file-open event, so the toolbar badge would
+    // sit at zero until the reader switched files and came back.
+    this.refreshActiveMarkupCount();
   }
 
   async onClose(): Promise<void> {
     this.cancelQueuedRender();
+    if (this.countTimer !== null) {
+      window.clearTimeout(this.countTimer);
+      this.countTimer = null;
+    }
     this.previewTargets.clear();
     this.containerEl.empty();
   }
@@ -613,7 +622,12 @@ export class SheetNavigatorView extends ItemView {
   private paintBadge(el: HTMLElement, count: number): void {
     el.empty();
     el.toggleClass("is-visible", count > 0);
-    if (count === 0) return;
+    if (count === 0) {
+      // Emptying the element leaves its attributes behind, so a card that drops
+      // to zero would keep announcing a count it no longer shows.
+      el.removeAttribute("aria-label");
+      return;
+    }
     setIcon(el, "message-square");
     el.createSpan().setText(String(count));
     el.setAttribute("aria-label", `${count} open in review`);
@@ -628,7 +642,10 @@ export class SheetNavigatorView extends ItemView {
         const file = this.app.vault.getAbstractFileByPath(path);
         if (!(file instanceof TFile)) return null;
         try {
-          return { els, ...this.summarise(await this.app.vault.cachedRead(file)) };
+          // Live text, not cachedRead: the open note's card would otherwise
+          // trail the toolbar badge by Obsidian's autosave interval, and the
+          // two counts would visibly disagree for a couple of seconds.
+          return { els, ...this.summarise(await readLiveContent(this.app, file)) };
         } catch {
           return null;
         }
@@ -649,7 +666,7 @@ export class SheetNavigatorView extends ItemView {
     const seq = this.renderSeq;
     let summary: { text: string; count: number };
     try {
-      summary = this.summarise(await this.app.vault.cachedRead(file));
+      summary = this.summarise(await readLiveContent(this.app, file));
     } catch {
       return;
     }

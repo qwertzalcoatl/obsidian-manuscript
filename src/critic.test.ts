@@ -1,6 +1,7 @@
 import {
   parseCritic,
   applyEntry,
+  minimalEdit,
   renderAccepted,
   renderRejected,
   type Entry,
@@ -432,5 +433,74 @@ describe('renderAccepted / renderRejected', () => {
   it('is idempotent — rendering an already-clean result changes nothing', () => {
     const once = renderAccepted(mixed);
     expect(renderAccepted(once)).toBe(once);
+  });
+});
+
+describe('minimalEdit', () => {
+  /** Applying the edit must reproduce `after` exactly — the property that matters. */
+  const roundTrip = (before: string, after: string) => {
+    const e = minimalEdit(before, after);
+    if (e === null) return before;
+    return before.slice(0, e.from) + e.text + before.slice(e.to);
+  };
+
+  it('returns null when nothing changed', () => {
+    expect(minimalEdit('gleich', 'gleich')).toBeNull();
+  });
+
+  it('narrows a deletion to just the removed span', () => {
+    const before = 'Sie ging {--fort--} heute.';
+    const after = 'Sie ging  heute.';
+    expect(minimalEdit(before, after)).toEqual({ from: 9, to: 19, text: '' });
+    expect(roundTrip(before, after)).toBe(after);
+  });
+
+  it('narrows a substitution to the changed word', () => {
+    const before = 'Das {~~kalte~>fahle~~} Licht.';
+    const after = 'Das fahle Licht.';
+    const e = minimalEdit(before, after)!;
+    // Touches only the construct, never the surrounding sentence.
+    expect(before.slice(0, e.from)).toBe('Das ');
+    expect(before.slice(e.to)).toBe(' Licht.');
+    expect(roundTrip(before, after)).toBe(after);
+  });
+
+  it('handles insertion at the very start and very end', () => {
+    expect(roundTrip('bcd', 'abcd')).toBe('abcd');
+    expect(roundTrip('abc', 'abcd')).toBe('abcd');
+  });
+
+  it('handles emptying the document', () => {
+    expect(roundTrip('{>>alles<<}', '')).toBe('');
+  });
+
+  it('handles repeated text, where prefix and suffix scans could overlap', () => {
+    expect(roundTrip('aaaa', 'aa')).toBe('aa');
+    expect(roundTrip('aa', 'aaaa')).toBe('aaaa');
+    expect(roundTrip('abab', 'ab')).toBe('ab');
+  });
+
+  it('never produces a reversed range', () => {
+    for (const [b, a] of [['aaaa', 'aa'], ['aa', 'aaaa'], ['', 'x'], ['x', '']] as const) {
+      const e = minimalEdit(b, a);
+      if (e) expect(e.to).toBeGreaterThanOrEqual(e.from);
+    }
+  });
+
+  it('round-trips every transform this plugin performs', () => {
+    const sources = [
+      'Sie {++leise ++}ging.',
+      'Sie ging{-- fort--}.',
+      'Das {~~kalte~>fahle~~} Licht.',
+      'Sie {==ging==}{>>warum?<<} fort.',
+      'Erste.\n{>>Notiz<<}\nZweite.',
+      'Sie ==ging==%%warum?%% fort.',
+    ];
+    for (const src of sources) {
+      for (const render of [renderAccepted, renderRejected]) {
+        const after = render(src);
+        expect(roundTrip(src, after)).toBe(after);
+      }
+    }
   });
 });

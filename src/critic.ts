@@ -500,3 +500,34 @@ export function renderAccepted(content: string): string {
 export function renderRejected(content: string): string {
   return renderAll(content, 'reject');
 }
+
+/**
+ * The smallest single replacement turning `before` into `after`, or null when
+ * they already match.
+ *
+ * The transforms above return a whole document, but writing a whole document
+ * back to the editor is not equivalent to changing the part that differs:
+ * CodeMirror maps the caret through the change, and replacing [0, len) sends
+ * it to the top of the note. Narrowing the write to the bytes that actually
+ * moved leaves the caret, the selection and the scroll position where the
+ * writer left them.
+ */
+export function minimalEdit(
+  before: string,
+  after: string
+): { from: number; to: number; text: string } | null {
+  if (before === after) return null;
+
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before[start] === after[start]) start++;
+
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (endBefore > start && endAfter > start && before[endBefore - 1] === after[endAfter - 1]) {
+    endBefore--;
+    endAfter--;
+  }
+
+  return { from: start, to: endBefore, text: after.slice(start, endAfter) };
+}
