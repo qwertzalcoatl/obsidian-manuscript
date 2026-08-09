@@ -409,11 +409,16 @@
   vertical-align: baseline;
   color: var(--text-accent);
   opacity: 0.55;
-  cursor: pointer;
   transition: opacity 0.15s ease;
 }
 
-.sn-critic-glyph:hover {
+/* Live Preview only: there a click maps to a document offset and can focus the
+   card. In Reading view the glyph is an indicator, so it does not offer. */
+.sn-critic-glyph.is-interactive {
+  cursor: pointer;
+}
+
+.sn-critic-glyph.is-interactive:hover {
   opacity: 1;
 }
 
@@ -657,12 +662,11 @@
   gap: 6px;
 }
 
+/* Shares the row with the badge without changing how titles wrap — a long
+   German scene title still runs onto a second line rather than being clipped. */
 .sheet-nav-title-line .sheet-nav-card-title {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sheet-nav-card-badge {

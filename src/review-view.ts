@@ -5,6 +5,7 @@
 // reads the file you are looking at and nothing else.
 
 import {
+  App,
   ItemView,
   MarkdownView,
   Menu,
@@ -29,6 +30,23 @@ export const VIEW_TYPE_REVIEW = 'sheet-navigator-review';
 const REFRESH_DELAY = 200;
 
 const COMMENT_HOTKEY = Platform.isMacOS ? '⌘⇧M' : 'Ctrl+Shift+M';
+
+/**
+ * The note as the user currently sees it: the editor's text when it is open,
+ * so unsaved keystrokes count, and the cached file otherwise.
+ *
+ * Shared with the navigator's toolbar badge — reading the two counts from
+ * different sources is how they end up disagreeing on screen.
+ */
+export async function readLiveContent(app: App, file: TFile): Promise<string> {
+  for (const leaf of app.workspace.getLeavesOfType('markdown')) {
+    const view = leaf.view;
+    if (view instanceof MarkdownView && view.file?.path === file.path) {
+      return view.editor.getValue();
+    }
+  }
+  return app.vault.cachedRead(file);
+}
 
 /**
  * An entry plus the exact source it was parsed from.
@@ -125,10 +143,8 @@ export class ReviewView extends ItemView {
     return null;
   }
 
-  /** Live editor text when the note is open, so unsaved edits are included. */
-  private async readContent(file: TFile): Promise<string> {
-    const view = this.editorViewFor(file);
-    return view ? view.editor.getValue() : this.app.vault.cachedRead(file);
+  private readContent(file: TFile): Promise<string> {
+    return readLiveContent(this.app, file);
   }
 
   refresh(): void {
@@ -307,8 +323,18 @@ export class ReviewView extends ItemView {
       return;
     }
 
+    // Two independent checks, because the cost of being wrong here is a
+    // silently mangled manuscript: the source at those offsets must still be
+    // byte-identical, and a fresh parse of the live text must still agree that
+    // an entry of this kind lives exactly there.
     const content = view.editor.getValue();
-    if (content.slice(card.entry.from, card.entry.to) !== card.raw) {
+    const stillThere =
+      content.slice(card.entry.from, card.entry.to) === card.raw &&
+      parseCritic(content).some(
+        (e) => e.from === card.entry.from && e.to === card.entry.to && e.kind === card.entry.kind
+      );
+
+    if (!stillThere) {
       new Notice('The note changed — the list has been refreshed. Try again.');
       this.refresh();
       return;

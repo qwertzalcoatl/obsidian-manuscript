@@ -65,7 +65,9 @@ class CommentGlyph extends WidgetType {
 
   toDOM(): HTMLElement {
     const el = document.createElement('span');
-    el.className = 'sn-critic-glyph';
+    // Only clickable in Live Preview, where a click maps to a document offset
+    // and can focus the matching card. Reading view's glyph is an indicator.
+    el.className = 'sn-critic-glyph is-interactive';
     el.setAttribute('aria-label', this.label);
     setIcon(el, 'message-square');
     return el;
@@ -137,7 +139,7 @@ function build(state: EditorState): CriticValue {
  * and a scene file is small enough that the honest answer is also the fast one.
  * Cursor movement reuses the cached parse and only rebuilds decorations.
  */
-const criticField = StateField.define<CriticValue>({
+export const criticField = StateField.define<CriticValue>({
   create: build,
   update(value, tr) {
     if (tr.docChanged) return build(tr.state);
@@ -147,8 +149,27 @@ const criticField = StateField.define<CriticValue>({
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
 });
 
-export function criticEditorExtension(): Extension {
-  return criticField;
+/**
+ * @param onReveal Called with an entry's start offset when the reader clicks
+ *   anywhere inside it — decorated text or comment glyph alike. Handling this
+ *   at the view level rather than on the widget covers both with one listener
+ *   and keeps the click from being swallowed: the caret still moves.
+ */
+export function criticEditorExtension(onReveal: (offset: number) => void): Extension {
+  return [
+    criticField,
+    EditorView.domEventHandlers({
+      click(event, view) {
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        if (pos === null) return false;
+        const hit = view.state
+          .field(criticField)
+          .entries.find((e) => pos >= e.from && pos <= e.to);
+        if (hit) onReveal(hit.from);
+        return false;
+      },
+    }),
+  ];
 }
 
 // ─── Reading view ───

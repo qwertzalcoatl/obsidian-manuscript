@@ -19,7 +19,7 @@ import {
 import { extractSnippet } from "./text";
 import { parseCritic, renderAccepted, renderRejected } from "./critic";
 import { criticEditorExtension, renderCriticMarkup } from "./critic-render";
-import { ReviewView, VIEW_TYPE_REVIEW } from "./review-view";
+import { ReviewView, VIEW_TYPE_REVIEW, readLiveContent } from "./review-view";
 import {
   parseItemName,
   displayTitle,
@@ -34,6 +34,9 @@ import {
 } from "./naming";
 
 const VIEW_TYPE = "sheet-navigator-view";
+
+/** Keystrokes rarely change the markup count; no need to recount on each one. */
+const COUNT_DEBOUNCE = 300;
 
 interface SheetNavigatorSettings {
   orderingEnabled: boolean;
@@ -117,6 +120,7 @@ export class SheetNavigatorView extends ItemView {
    * constantly. A cachedRead resolving later would write into a detached node.
    */
   private activeMarkupCount = 0;
+  private countTimer: number | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SheetNavigatorPlugin) {
     super(leaf);
@@ -147,8 +151,15 @@ export class SheetNavigatorView extends ItemView {
     this.registerEvent(
       this.app.workspace.on("file-open", () => {
         this.highlightActive();
-        void this.refreshActiveMarkupCount();
+        this.refreshActiveMarkupCount();
       })
+    );
+
+    // Also on every edit, not just on switching files: accepting a suggestion
+    // in the drawer changes the count, and vault "modify" only lands on
+    // Obsidian's save debounce — long enough for the two badges to disagree.
+    this.registerEvent(
+      this.app.workspace.on("editor-change", () => this.refreshActiveMarkupCount())
     );
 
     // A modify touches one note's text, never the folder's structure — repaint
@@ -427,15 +438,28 @@ export class SheetNavigatorView extends ItemView {
     reviewBtn.addEventListener("click", () => void this.plugin.activateReviewView());
   }
 
-  /** Re-reads the active sheet's markup count and repaints the toolbar badge. */
-  async refreshActiveMarkupCount(): Promise<void> {
+  /**
+   * Re-reads the active sheet's markup count and repaints the toolbar badge.
+   *
+   * Debounced because it is wired to editor-change: the count only moves when
+   * markup is added or resolved, so parsing on every keystroke would be work
+   * spent to reach the same answer.
+   */
+  refreshActiveMarkupCount(): void {
     if (!this.plugin.settings.reviewEnabled) return;
+    if (this.countTimer !== null) window.clearTimeout(this.countTimer);
+    this.countTimer = window.setTimeout(() => {
+      this.countTimer = null;
+      void this.recountActiveMarkup();
+    }, COUNT_DEBOUNCE);
+  }
 
+  private async recountActiveMarkup(): Promise<void> {
     const file = this.app.workspace.getActiveFile();
     let next = 0;
     if (file && file.extension === "md") {
       try {
-        next = parseCritic(await this.app.vault.cachedRead(file)).length;
+        next = parseCritic(await readLiveContent(this.app, file)).length;
       } catch {
         next = 0;
       }
@@ -564,9 +588,15 @@ export class SheetNavigatorView extends ItemView {
    * opening sentence carries a comment previews as prose rather than as braces.
    */
   private summarise(content: string): { text: string; count: number } {
+    if (!this.plugin.settings.reviewEnabled) {
+      return { text: extractSnippet(content), count: 0 };
+    }
+    // Most notes carry no markup, and for those renderAccepted would parse a
+    // second time only to hand back the string it was given.
+    const count = parseCritic(content).length;
     return {
-      text: extractSnippet(renderAccepted(content)),
-      count: this.plugin.settings.reviewEnabled ? parseCritic(content).length : 0,
+      text: extractSnippet(count === 0 ? content : renderAccepted(content)),
+      count,
     };
   }
 
@@ -1231,7 +1261,9 @@ export default class SheetNavigatorPlugin extends Plugin {
    * for a reload rather than pretending to take effect immediately.
    */
   private loadReview(): void {
-    this.registerEditorExtension(criticEditorExtension());
+    this.registerEditorExtension(
+      criticEditorExtension((offset) => this.focusReviewCard(offset))
+    );
     this.registerMarkdownPostProcessor((el) => renderCriticMarkup(el));
 
     this.addCommand({
@@ -1363,6 +1395,19 @@ export default class SheetNavigatorPlugin extends Plugin {
       return;
     }
     editor.replaceRange(next, editor.offsetToPos(0), editor.offsetToPos(content.length));
+  }
+
+  /**
+   * Highlights the card covering `offset`, if the drawer happens to be open.
+   *
+   * Deliberately does not open it: clicking inside a marked-up paragraph is
+   * something you do while writing, and having a sidebar spring out each time
+   * would be the plugin interrupting rather than answering.
+   */
+  private focusReviewCard(offset: number): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)) {
+      if (leaf.view instanceof ReviewView) leaf.view.focusAt(offset);
+    }
   }
 
   /** Repaints both views after a settings change. */
