@@ -77,17 +77,6 @@
   color: var(--text-normal);
 }
 
-.sheet-nav-export-btn.is-dimmed {
-  opacity: 0.3;
-  cursor: default;
-  pointer-events: none;
-}
-
-
-.sheet-nav-export-btn.is-active {
-  color: var(--interactive-accent);
-}
-
 /* Scrollable list */
 .sheet-nav-list {
   flex: 1;
@@ -202,10 +191,17 @@
   bottom: 15%;
 }
 
-/* Chapter number */
+/* Chapter number.
+   The slot is rendered on every folder card, empty when there is no number, so
+   titles line up in a folder that mixes numbered and unnumbered items. Its
+   width follows the widest number present and is clamped at both ends, so
+   "100" does not wrap and one odd name cannot squeeze every title. */
 .sheet-nav-chapter-num {
   flex-shrink: 0;
-  width: 32px;
+  width: clamp(32px, calc(var(--sn-folder-num-chars, 1) * 1ch + 4px), 6.5ch);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
   font-size: 22px;
   font-weight: 200;
   line-height: 1;
@@ -216,6 +212,12 @@
   padding-top: 1px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/* Nobody in this folder uses numbers — drop the column rather than indent
+   every card against an empty gutter. */
+.sheet-nav-list[data-folder-nums="none"] .sheet-nav-chapter-num {
+  display: none;
 }
 
 .sheet-nav-folder-card:hover .sheet-nav-chapter-num {
@@ -301,10 +303,13 @@
   bottom: 10%;
 }
 
-/* File number */
+/* File number — see .sheet-nav-chapter-num for the sizing rationale. */
 .sheet-nav-file-num {
   flex-shrink: 0;
-  width: 22px;
+  width: clamp(22px, calc(var(--sn-file-num-chars, 1) * 1ch + 4px), 6.5ch);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
   font-size: 15px;
   font-weight: 200;
   line-height: 1;
@@ -315,6 +320,10 @@
   padding-top: 2px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+.sheet-nav-list[data-file-nums="none"] .sheet-nav-file-num {
+  display: none;
 }
 
 .sheet-nav-file-card:hover .sheet-nav-file-num {
@@ -342,66 +351,386 @@
   font-size: 11.5px;
   color: var(--text-faint);
   line-height: 1.5;
+  /* Reserved even when empty so an empty note's card matches its neighbours
+     and nothing shifts when the preview text arrives. */
+  min-height: 1.5em;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* ─── Settings: binary status ─── */
-.sn-pdflatex-status {
-  font-size: 12px;
+/* A note named only for its number, e.g. "3.md" — the badge already shows the
+   number, so the title slot carries a placeholder instead of repeating it. */
+.sheet-nav-card-title.is-untitled,
+.sheet-nav-card-name.is-untitled {
+  color: var(--text-faint);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ─── Empty state ─── */
+.sheet-nav-empty {
+  padding: 18px 12px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ─── Inline editorial markup ───
+   The change is shown as the change, not as a labelled badge: struck through
+   for a deletion, underlined for an insertion. Text keeps its normal colour —
+   coloured prose is hard to read, and the decoration already carries the
+   meaning. Every colour resolves through an Obsidian variable so third-party
+   themes restyle these along with everything else. */
+
+.sn-critic-insertion {
+  border-bottom: 1px solid var(--color-green, #4caf50);
+}
+
+.sn-critic-deletion {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-red, #e05252);
+  text-decoration-thickness: 1px;
+  opacity: 0.6;
+}
+
+.sn-critic-highlight {
+  background-color: color-mix(in srgb, var(--text-accent) 14%, transparent);
+  border-radius: 2px;
+}
+
+/* Stands in for a whole {>>…<<} construct. Sized against the surrounding text
+   rather than a fixed px so it keeps its proportion in any editor font size. */
+.sn-critic-glyph {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  color: var(--text-accent);
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+/* Live Preview only: there a click maps to a document offset and can focus the
+   card. In Reading view the glyph is an indicator, so it does not offer. */
+.sn-critic-glyph.is-interactive {
+  cursor: pointer;
+}
+
+.sn-critic-glyph.is-interactive:hover {
+  opacity: 1;
+}
+
+.sn-critic-glyph svg {
+  width: 0.85em;
+  height: 0.85em;
+}
+
+/* ─── Review drawer ───
+   Deliberately the same object as the navigator: identical padding rhythm,
+   hairline rules instead of card chrome, and the accent bar reused as the
+   type indicator. The bar's colour is the only thing that says what kind of
+   change a card holds — there are no type labels, because a struck-through
+   red quote already says "proposed deletion" and a word under it would be
+   furniture. Screen readers get the same information from aria-label. */
+
+.sheet-review {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sheet-review-header {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.sheet-review-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-review-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-normal);
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-review-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.sheet-review-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
   color: var(--text-muted);
-  padding: 2px 0 8px;
+  flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.sn-pdflatex-found {
-  color: var(--color-green, #4caf50);
-}
-
-.sn-pdflatex-missing {
-  color: var(--color-orange, #ff9800);
-}
-
-/* ─── Settings: requirement note ─── */
-.sn-pdf-requirement-note {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin: 0 0 12px;
-  padding-left: 18px;
-  line-height: 1.6;
-}
-
-/* ─── Selection mode ─── */
-.sheet-nav-card.is-selected {
-  background-color: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
-  box-shadow: inset 3px 0 0 0 var(--interactive-accent);
-}
-
-.sheet-nav-card.is-selected .sheet-nav-card-title,
-.sheet-nav-card.is-selected .sheet-nav-card-name {
+.sheet-review-more:hover {
+  background-color: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-/* Suppress active highlight when a card is selected (avoid double-highlight) */
-.is-selection-mode .sheet-nav-card.is-active:not(.is-selected) {
-  background-color: transparent;
-  box-shadow: none;
+.sheet-review-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 20px;
 }
 
-/* ─── Export modal ─── */
-.sn-export-summary {
+/* Same geometry as .sheet-nav-file-card, so the two panels read as one plugin. */
+.sheet-review-card {
+  position: relative;
+  padding: 14px 10px 14px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background-color 0.15s ease;
+}
+
+.sheet-review-card:last-child {
+  border-bottom: none;
+}
+
+.sheet-review-card:hover,
+.sheet-review-card.is-focused {
+  background-color: var(--background-modifier-hover);
+}
+
+.sheet-review-card:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+
+/* The type indicator. Always on, unlike the navigator's hover-only bar —
+   here it carries meaning rather than pointing at what you are hovering. */
+.sheet-review-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--text-accent);
+}
+
+.sheet-review-card[data-kind="insertion"]::before {
+  background: var(--color-green, #4caf50);
+}
+
+.sheet-review-card[data-kind="deletion"]::before {
+  background: var(--color-red, #e05252);
+}
+
+.sheet-review-card[data-kind="substitution"]::before {
+  background: var(--color-orange, #ff9800);
+}
+
+/* Monospace because the quote *is* typescript — text lifted verbatim out of
+   the manuscript. It separates "text from your book" from "text about your
+   book" without needing a border or a second colour, and it keeps a
+   strikethrough legible at this size. */
+.sheet-review-quote {
+  font-family: var(--font-monospace);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-normal);
+  word-break: break-word;
+}
+
+/* The surrounding line, shown when a comment has no anchor of its own. It is
+   reference rather than content, so it sits one step back — but at --text-muted
+   rather than --text-faint, which was illegible next to a full-contrast body. */
+.sheet-review-quote.is-context {
+  font-family: var(--font-text);
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 12px;
   font-style: italic;
-  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.sn-export-status {
+.sheet-review-arrow {
+  color: var(--text-faint);
+  padding: 0 0.4em;
+}
+
+/* Comment bodies are prose, so they get the reading font — and full contrast.
+   On a comment card the comment IS the payload, not an annotation on one, so
+   muting it would wash out the only thing there is to read. The hierarchy
+   against the quote comes from the monospace/prose contrast and the accent
+   bar instead, which costs nothing in legibility. */
+.sheet-review-comment {
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-normal);
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+/* Hidden until wanted, the way the navigator's drag handle is: forty cards
+   should read as a column of prose, not a wall of buttons. */
+.sheet-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sheet-review-card:hover .sheet-review-actions,
+.sheet-review-card:focus-within .sheet-review-actions {
+  opacity: 1;
+}
+
+.sheet-review-action {
+  font-size: 11.5px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sheet-review-action:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.sheet-review-action.is-primary {
+  color: var(--text-accent);
+}
+
+.sheet-review-action.is-primary:hover {
+  background-color: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  color: var(--text-accent-hover, var(--text-accent));
+}
+
+/* The one orchestrated moment: a decided card collapses and the list closes up. */
+.sheet-review-card.is-resolving {
+  height: 0 !important;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-width: 0;
+  transition: height 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
+}
+
+.sheet-review-empty {
+  padding: 18px 12px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-style: italic;
+  text-align: center;
+  line-height: 1.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-review-card,
+  .sheet-review-card.is-resolving,
+  .sheet-review-actions,
+  .sn-critic-glyph {
+    transition: none;
+  }
+}
+
+/* ─── Review count on navigator cards and toolbar ─── */
+
+.sheet-nav-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* Shares the row with the badge without changing how titles wrap — a long
+   German scene title still runs onto a second line rather than being clipped. */
+.sheet-nav-title-line .sheet-nav-card-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-nav-card-badge {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--text-accent);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-nav-card-badge.is-visible {
+  display: inline-flex;
+}
+
+.sheet-nav-card-badge svg {
+  width: 11px;
+  height: 11px;
+}
+
+.sheet-nav-review-btn {
+  position: relative;
+}
+
+.sheet-nav-review-btn.is-dimmed {
+  opacity: 0.35;
+}
+
+.sheet-nav-review-btn.is-active {
+  color: var(--text-accent);
+}
+
+.sheet-nav-review-count {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-radius: 999px;
+  padding: 1px 3px;
+  min-width: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Replace modal ─── */
+.sn-replace-original {
+  font-family: var(--font-monospace);
   font-size: 12px;
   color: var(--text-muted);
-  min-height: 1.5em;
-  white-space: pre-wrap;
-  margin-top: 4px;
+  margin: 0 0 12px;
+  word-break: break-word;
 }

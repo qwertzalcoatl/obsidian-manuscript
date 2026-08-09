@@ -2,9 +2,7 @@
 
 A single-column, drill-down sidebar for [Obsidian](https://obsidian.md) — built for writers who organize novels, screenplays, and long-form projects in folders and numbered files.
 
-Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click to open a scene, shift-click to select for export.
-
-![Sheet Navigator screenshot](screenshot.png)
+Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click a scene to open it. Mark up a draft with suggestions and comments, then work through them in a side drawer.
 
 ## Features
 
@@ -16,7 +14,7 @@ Browse your vault one level at a time: chapters show as cards with note counts, 
 - **Right-click context menu** — rename or delete files and folders
 - **Active note highlight** — the currently open note is highlighted in the sidebar
 - **Live updates** — the list refreshes when files are created, renamed, or modified
-- **PDF export** — export any selection of scenes and chapters as a Normseite-formatted PDF
+- **Editorial review** — suggest edits and leave comments in CriticMarkup, then accept or reject them one at a time from a side drawer
 
 ## How it works
 
@@ -26,7 +24,7 @@ The navigator shows the contents of the current folder. Folders appear as chapte
 
 ### Filename-based ordering
 
-Files and folders are sorted naturally by name. Use numeric prefixes to control order:
+Numbered items come first in numeric order, then everything else alphabetically. Use numeric prefixes to control order:
 
 ```
 1 – Prolog.md
@@ -37,29 +35,83 @@ Files and folders are sorted naturally by name. Use numeric prefixes to control 
 
 ### Drag-and-drop reordering
 
-Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dragging and dropping renumbers all items in the current folder sequentially (1, 2, 3…), preserving titles and separators.
+Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dragging and dropping renumbers the folder sequentially (1, 2, 3…), preserving each item's title and its choice of separator.
 
-### PDF export (Normseite)
+Items **without** a number are left alone — they keep their exact filename and sort to the end of the list. Dragging an unnumbered item into the numbered run is the one action that gives it a number.
 
-Select scenes and chapters, then click the export button in the toolbar to export a Normseite-formatted PDF.
+Folders and notes are numbered as separate sequences, so dragging a note onto a chapter folder is refused rather than producing two items that share a number.
 
-**Selecting:**
-- **Click a note** — selects it (highlights it, activates the export button)
-- **Shift-click a note or folder** — adds it to the selection
-- **Escape** — clears the selection
+## Editorial review
 
-**Exporting:**
-- Click the **↓ export button** in the header toolbar
-- Choose a template (Normseite DE) and click Export
-- A native Save As dialog lets you choose where to save the PDF
+An editorial pass on a chapter is a round trip: the text gets marked up, then you walk the marks and decide. Sheet Navigator stores those marks as [CriticMarkup](http://criticmarkup.com) — plain text in the note itself, no sidecar database — and shows them in a **Review** drawer for the sheet you have open.
 
-Files within the same folder are separated by scene breaks. Different folders produce page breaks between chapters. Markdown headings are converted to formatted LaTeX headings.
+The workflow this is built for: ask Claude (or any assistant) to *"review chapter 3 and mark it up in CriticMarkup"*, then open the drawer and work through what comes back.
 
-**Requirements:** pdflatex and pandoc must be installed.
-- **pdflatex** — part of any TeX distribution: [MacTeX](https://www.tug.org/mactex/), [MiKTeX](https://miktex.org), [TeX Live](https://www.tug.org/texlive/)
-- **pandoc** — ships with the MacTeX full installer; otherwise `brew install pandoc` or [pandoc.org](https://pandoc.org)
+### The five marks
 
-Configure paths in **Settings > Sheet Navigator > PDF Export** if the binaries are not on your PATH.
+Three of them propose an edit, so they have two possible outcomes:
+
+| Written | Means | Accept | Reject |
+|---|---|---|---|
+| `{++neuer Text++}` | insertion | keeps the text | drops it |
+| `{--alter Text--}` | deletion | removes the text | keeps it |
+| `{~~alt~>neu~~}` | substitution | writes `neu` | keeps `alt` |
+
+The other two are annotations. They have one outcome, so they only offer **Resolve**:
+
+| Written | Means | Resolve |
+|---|---|---|
+| `{==Text==}` | highlight | unwraps it, leaving the text |
+| `{>>Kommentar<<}` | comment | deletes it |
+
+A `{>>Kommentar<<}` written directly after another mark belongs to it and shares its card. Deciding that mark takes the comment with it — the decision is made, so the note about it is moot.
+
+Obsidian's own syntax is read too: `%%Kommentar%%` is a standalone comment, and `==Text==%%Kommentar%%` is a commented highlight. A plain `==Text==` on its own is left alone — that's ordinary markdown, not an editorial mark.
+
+### Working through a pass
+
+Open the drawer from the **Review button** in the navigator toolbar, or the command palette. Each mark becomes a card showing the affected text as the change itself: struck through for a deletion, underlined for an insertion. Click a card to jump to it in the editor.
+
+- **Accept / Reject** decide a suggestion
+- **Resolve** clears a highlight or comment, leaving the text
+- **⋯ → Accept all / Reject all** settles the whole note in one step; either way the highlights and comments go too
+
+Every action is written through the editor, so **⌘Z undoes it** like any other edit.
+
+### Marking up by hand
+
+Every construct has a command, so the whole format is reachable from the command palette (`⌘P`). Typing *suggest* brings up the three suggestion types together; typing *markup* brings up the whole-note actions.
+
+| Command | Needs a selection | Writes |
+|---|---|---|
+| Comment on selection — `⌘⇧M` | yes | `{==Text==}{>>…<<}`, caret in the comment |
+| Highlight selection | yes | `{==Text==}` |
+| Suggest deletion | yes | `{--Text--}` |
+| Suggest insertion… | no | `{++Text++}` — wraps a selection, or asks what to insert |
+| Suggest replacement… | yes | `{~~alt~>neu~~}` — asks for the new wording |
+| Accept all markup in this note | no | resolves everything, keeping the suggestions |
+| Reject all markup in this note | no | resolves everything, turning them all down |
+| Open review panel | no | — |
+
+The four wrapping commands are also on the editor's right-click menu. Nothing in your note is ever modified unless you invoke one of these.
+
+### Known limitations
+
+- A mark may wrap across a soft line break but not across a blank line, so there are no multi-paragraph anchors. This also stops a stray `{++` from swallowing the rest of the note when it eventually meets a `++}`.
+- Marks do not nest. `{==a {==b==} c==}` closes at the first `==}`.
+- **Accept all** / **Reject all** rewrite everything between the first and last mark in one edit, so the cursor can move if it was sitting between them. Deciding marks one at a time leaves the cursor exactly where it was.
+- `{--alt--}{++neu++}` is read as two separate marks, not as one substitution. Use `{~~alt~>neu~~}` for that.
+- Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
+- In Reading view, only CriticMarkup renders. Obsidian removes `%%comments%%` from the page before any plugin can see them, so those stay invisible there — exactly as they are without this plugin.
+
+## Settings
+
+**Settings > Community plugins > Sheet Navigator**
+
+| Setting | Default | Effect |
+|---|---|---|
+| Enable ordering | off | Shows drag handles and renumbers folders on drop |
+| Enable review | on | Renders CriticMarkup inline and enables the Review drawer and its commands. With it off, marks are left as plain text. Obsidian needs a reload for this to take full effect. |
 
 ## Installation
 
@@ -87,4 +139,4 @@ npm test       # run tests
 
 ## License
 
-Apache 2.0
+MIT — see [LICENSE](LICENSE).
