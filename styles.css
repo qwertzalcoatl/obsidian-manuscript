@@ -559,9 +559,13 @@
   word-break: break-word;
 }
 
+/* The surrounding line, shown when a comment has no anchor of its own. It is
+   reference rather than content, so it sits one step back — but at --text-muted
+   rather than --text-faint, which was illegible next to a full-contrast body. */
 .sheet-review-quote.is-context {
   font-family: var(--font-text);
-  color: var(--text-faint);
+  font-size: 12px;
+  color: var(--text-muted);
   font-style: italic;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -574,13 +578,17 @@
   padding: 0 0.4em;
 }
 
-/* Comment bodies are prose, so they get the reading font. */
+/* Comment bodies are prose, so they get the reading font — and full contrast.
+   On a comment card the comment IS the payload, not an annotation on one, so
+   muting it would wash out the only thing there is to read. The hierarchy
+   against the quote comes from the monospace/prose contrast and the accent
+   bar instead, which costs nothing in legibility. */
 .sheet-review-comment {
   font-family: var(--font-text);
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text-muted);
-  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-normal);
+  margin-top: 6px;
   word-break: break-word;
 }
 

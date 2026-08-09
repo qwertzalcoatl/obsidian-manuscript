@@ -75,16 +75,20 @@ Every action is written through the editor, so **⌘Z undoes it** like any other
 
 ### Marking up by hand
 
-Select text, then:
+Every construct has a command, so the whole format is reachable from the command palette (`⌘P`). Typing *suggest* brings up the three suggestion types together; typing *markup* brings up the whole-note actions.
 
-| Command | Hotkey |
-|---|---|
-| Comment on selection | `⌘⇧M` |
-| Suggest deletion | — |
-| Highlight selection | — |
-| Replace with… | — |
+| Command | Needs a selection | Writes |
+|---|---|---|
+| Comment on selection — `⌘⇧M` | yes | `{==Text==}{>>…<<}`, caret in the comment |
+| Highlight selection | yes | `{==Text==}` |
+| Suggest deletion | yes | `{--Text--}` |
+| Suggest insertion… | no | `{++Text++}` — wraps a selection, or asks what to insert |
+| Suggest replacement… | yes | `{~~alt~>neu~~}` — asks for the new wording |
+| Accept all markup in this note | no | resolves everything, keeping the suggestions |
+| Reject all markup in this note | no | resolves everything, turning them all down |
+| Open review panel | no | — |
 
-The first three are also on the editor's right-click menu. Nothing in your note is ever modified unless you invoke one of these.
+The four wrapping commands are also on the editor's right-click menu. Nothing in your note is ever modified unless you invoke one of these.
 
 ### Known limitations
 

@@ -15,6 +15,7 @@ import {
   Editor,
   Notice,
   setIcon,
+  type Hotkey,
 } from "obsidian";
 import { extractSnippet } from "./text";
 import { parseCritic, renderAccepted, renderRejected } from "./critic";
@@ -37,6 +38,15 @@ const VIEW_TYPE = "sheet-navigator-view";
 
 /** Keystrokes rarely change the markup count; no need to recount on each one. */
 const COUNT_DEBOUNCE = 300;
+
+/** The constructs a selection can be wrapped in directly, without a prompt. */
+type MarkupKind = "comment" | "highlight" | "deletion" | "insertion";
+
+const WRAPPERS: Record<Exclude<MarkupKind, "comment">, [string, string]> = {
+  highlight: ["{==", "==}"],
+  deletion: ["{--", "--}"],
+  insertion: ["{++", "++}"],
+};
 
 interface SheetNavigatorSettings {
   orderingEnabled: boolean;
@@ -1127,32 +1137,44 @@ class RenameModal extends Modal {
   }
 }
 
-/** Asks what the selected text should become, for a `{~~alt~>neu~~}`. */
-class ReplaceModal extends Modal {
+interface MarkupPromptOptions {
+  title: string;
+  /** The text being acted on, shown as monospace context. Omitted for an insertion. */
+  context?: string;
+  label: string;
+  initial: string;
+  /** Submitting this value would be a no-op, so the modal just closes. */
+  unchanged?: string;
+  onSubmit: (value: string) => void;
+}
+
+/** Asks for the text of a suggestion — the new wording, or what to insert. */
+class MarkupPromptModal extends Modal {
   constructor(
     app: App,
-    private original: string,
-    private onSubmitCb: (replacement: string) => void
+    private opts: MarkupPromptOptions
   ) {
     super(app);
   }
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.createEl("h3", { text: "Replace with" });
-    contentEl.createEl("p", { cls: "sn-replace-original", text: this.original });
+    const { title, context, label, initial, unchanged, onSubmit } = this.opts;
 
-    let replacement = this.original;
+    contentEl.createEl("h3", { text: title });
+    if (context) contentEl.createEl("p", { cls: "sn-replace-original", text: context });
+
+    let value = initial;
     const submit = () => {
       this.close();
-      const trimmed = replacement.trim();
-      if (trimmed && trimmed !== this.original) this.onSubmitCb(trimmed);
+      const trimmed = value.trim();
+      if (trimmed && trimmed !== unchanged) onSubmit(trimmed);
     };
 
-    new Setting(contentEl).setName("New text").addText((text) => {
-      text.setValue(this.original);
-      text.onChange((value) => {
-        replacement = value;
+    new Setting(contentEl).setName(label).addText((text) => {
+      text.setValue(initial);
+      text.onChange((v) => {
+        value = v;
       });
       window.setTimeout(() => {
         text.inputEl.focus();
@@ -1260,6 +1282,25 @@ export default class SheetNavigatorPlugin extends Plugin {
    * extension cannot be unregistered, which is why flipping the toggle asks
    * for a reload rather than pretending to take effect immediately.
    */
+  /** A command that wraps the selection and is unavailable without one. */
+  private addSelectionCommand(
+    id: string,
+    name: string,
+    kind: MarkupKind,
+    hotkeys?: Hotkey[]
+  ): void {
+    this.addCommand({
+      id,
+      name,
+      ...(hotkeys ? { hotkeys } : {}),
+      editorCheckCallback: (checking, editor) => {
+        if (!editor.somethingSelected()) return false;
+        if (!checking) void this.wrapSelection(editor, kind);
+        return true;
+      },
+    });
+  }
+
   private loadReview(): void {
     this.registerEditorExtension(
       criticEditorExtension((offset) => this.focusReviewCard(offset))
@@ -1272,47 +1313,61 @@ export default class SheetNavigatorPlugin extends Plugin {
       callback: () => void this.activateReviewView(),
     });
 
-    this.addCommand({
-      id: "comment-on-selection",
-      name: "Comment on selection",
-      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "m" }],
-      editorCheckCallback: (checking, editor) => {
-        if (!editor.somethingSelected()) return false;
-        if (!checking) void this.wrapSelection(editor, "comment");
-        return true;
-      },
-    });
+    // One command per construct the format supports, named so that typing
+    // "suggest" in the palette turns up all three suggestion types together
+    // and "markup" turns up the whole-note actions.
+    this.addSelectionCommand("comment-on-selection", "Comment on selection", "comment", [
+      { modifiers: ["Mod", "Shift"], key: "m" },
+    ]);
+    this.addSelectionCommand("highlight-selection", "Highlight selection", "highlight");
+    this.addSelectionCommand("suggest-deletion", "Suggest deletion", "deletion");
 
+    // The only one that also works without a selection: inserting text is
+    // proposing something that is not there yet, so there may be nothing to
+    // wrap. With a selection it marks what you just wrote as a proposal.
     this.addCommand({
-      id: "suggest-deletion",
-      name: "Suggest deletion",
-      editorCheckCallback: (checking, editor) => {
-        if (!editor.somethingSelected()) return false;
-        if (!checking) void this.wrapSelection(editor, "deletion");
-        return true;
-      },
-    });
-
-    this.addCommand({
-      id: "highlight-selection",
-      name: "Highlight selection",
-      editorCheckCallback: (checking, editor) => {
-        if (!editor.somethingSelected()) return false;
-        if (!checking) void this.wrapSelection(editor, "highlight");
-        return true;
+      id: "suggest-insertion",
+      name: "Suggest insertion…",
+      editorCallback: (editor) => {
+        if (editor.somethingSelected()) {
+          void this.wrapSelection(editor, "insertion");
+          return;
+        }
+        const at = editor.getCursor();
+        new MarkupPromptModal(this.app, {
+          title: "Suggest insertion",
+          label: "Text to insert",
+          initial: "",
+          onSubmit: (text) => {
+            editor.replaceRange(`{++${text}++}`, at);
+            void this.activateReviewView(false);
+          },
+        }).open();
       },
     });
 
     this.addCommand({
       id: "suggest-replacement",
-      name: "Replace with…",
+      name: "Suggest replacement…",
       editorCheckCallback: (checking, editor) => {
         if (!editor.somethingSelected()) return false;
         if (!checking) {
-          new ReplaceModal(this.app, editor.getSelection(), (replacement) => {
-            const selection = editor.getSelection();
-            editor.replaceSelection(`{~~${selection}~>${replacement}~~}`);
-            void this.activateReviewView();
+          // Captured now, not inside the callback: the modal takes focus, and
+          // re-reading the selection afterwards is how you replace the wrong
+          // range — or nothing at all.
+          const selection = editor.getSelection();
+          const from = editor.getCursor("from");
+          const to = editor.getCursor("to");
+          new MarkupPromptModal(this.app, {
+            title: "Replace with",
+            context: selection,
+            label: "New text",
+            initial: selection,
+            unchanged: selection,
+            onSubmit: (replacement) => {
+              editor.replaceRange(`{~~${selection}~>${replacement}~~}`, from, to);
+              void this.activateReviewView(false);
+            },
           }).open();
         }
         return true;
@@ -1335,24 +1390,17 @@ export default class SheetNavigatorPlugin extends Plugin {
       this.app.workspace.on("editor-menu", (menu, editor) => {
         if (!editor.somethingSelected()) return;
         menu.addSeparator();
-        menu.addItem((item) =>
-          item
-            .setTitle("Comment on selection")
-            .setIcon("message-square-quote")
-            .onClick(() => void this.wrapSelection(editor, "comment"))
-        );
-        menu.addItem((item) =>
-          item
-            .setTitle("Suggest deletion")
-            .setIcon("strikethrough")
-            .onClick(() => void this.wrapSelection(editor, "deletion"))
-        );
-        menu.addItem((item) =>
-          item
-            .setTitle("Highlight selection")
-            .setIcon("highlighter")
-            .onClick(() => void this.wrapSelection(editor, "highlight"))
-        );
+        const wrap = (title: string, icon: string, kind: MarkupKind) =>
+          menu.addItem((item) =>
+            item
+              .setTitle(title)
+              .setIcon(icon)
+              .onClick(() => void this.wrapSelection(editor, kind))
+          );
+        wrap("Comment on selection", "message-square-quote", "comment");
+        wrap("Highlight selection", "highlighter", "highlight");
+        wrap("Suggest deletion", "strikethrough", "deletion");
+        wrap("Suggest insertion", "diff", "insertion");
       })
     );
   }
@@ -1364,24 +1412,19 @@ export default class SheetNavigatorPlugin extends Plugin {
    * be typed straight into the manuscript — the drawer is for reviewing, the
    * editor is for writing.
    */
-  private async wrapSelection(
-    editor: Editor,
-    kind: "comment" | "deletion" | "highlight"
-  ): Promise<void> {
+  private async wrapSelection(editor: Editor, kind: MarkupKind): Promise<void> {
     const selection = editor.getSelection();
     if (!selection) return;
 
     const start = editor.posToOffset(editor.getCursor("from"));
 
-    if (kind === "deletion") {
-      editor.replaceSelection(`{--${selection}--}`);
-    } else if (kind === "highlight") {
-      editor.replaceSelection(`{==${selection}==}`);
-    } else {
+    if (kind === "comment") {
       const anchor = `{==${selection}==}`;
       editor.replaceSelection(`${anchor}{>><<}`);
       // Just past the `{>>`, so the note can be typed immediately.
       editor.setCursor(editor.offsetToPos(start + anchor.length + 3));
+    } else {
+      editor.replaceSelection(`${WRAPPERS[kind][0]}${selection}${WRAPPERS[kind][1]}`);
     }
 
     await this.activateReviewView(false);
