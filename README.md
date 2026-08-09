@@ -2,9 +2,7 @@
 
 A single-column, drill-down sidebar for [Obsidian](https://obsidian.md) — built for writers who organize novels, screenplays, and long-form projects in folders and numbered files.
 
-Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click a scene to open it.
-
-![Sheet Navigator screenshot](screenshot.png)
+Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click a scene to open it. Mark up a draft with suggestions and comments, then work through them in a side drawer.
 
 ## Features
 
@@ -51,15 +49,22 @@ The workflow this is built for: ask Claude (or any assistant) to *"review chapte
 
 ### The five marks
 
+Three of them propose an edit, so they have two possible outcomes:
+
 | Written | Means | Accept | Reject |
 |---|---|---|---|
-| `{++neuer Text++}` | insertion | keeps it | drops it |
-| `{--alter Text--}` | deletion | removes it | keeps it |
+| `{++neuer Text++}` | insertion | keeps the text | drops it |
+| `{--alter Text--}` | deletion | removes the text | keeps it |
 | `{~~alt~>neu~~}` | substitution | writes `neu` | keeps `alt` |
-| `{==Text==}` | highlight | — resolve unwraps it | |
-| `{>>Kommentar<<}` | comment | — resolve deletes it | |
 
-A `{>>comment<<}` written directly after another mark belongs to it and shares its card.
+The other two are annotations. They have one outcome, so they only offer **Resolve**:
+
+| Written | Means | Resolve |
+|---|---|---|
+| `{==Text==}` | highlight | unwraps it, leaving the text |
+| `{>>Kommentar<<}` | comment | deletes it |
+
+A `{>>Kommentar<<}` written directly after another mark belongs to it and shares its card. Deciding that mark takes the comment with it — the decision is made, so the note about it is moot.
 
 Obsidian's own syntax is read too: `%%Kommentar%%` is a standalone comment, and `==Text==%%Kommentar%%` is a commented highlight. A plain `==Text==` on its own is left alone — that's ordinary markdown, not an editorial mark.
 
@@ -69,7 +74,7 @@ Open the drawer from the **Review button** in the navigator toolbar, or the comm
 
 - **Accept / Reject** decide a suggestion
 - **Resolve** clears a highlight or comment, leaving the text
-- **⋯ → Accept all / Reject all** clears the whole note at once
+- **⋯ → Accept all / Reject all** settles the whole note in one step; either way the highlights and comments go too
 
 Every action is written through the editor, so **⌘Z undoes it** like any other edit.
 
@@ -99,6 +104,15 @@ The four wrapping commands are also on the editor's right-click menu. Nothing in
 - Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
 - In Reading view, only CriticMarkup renders. Obsidian removes `%%comments%%` from the page before any plugin can see them, so those stay invisible there — exactly as they are without this plugin.
 
+## Settings
+
+**Settings > Community plugins > Sheet Navigator**
+
+| Setting | Default | Effect |
+|---|---|---|
+| Enable ordering | off | Shows drag handles and renumbers folders on drop |
+| Enable review | on | Renders CriticMarkup inline and enables the Review drawer and its commands. With it off, marks are left as plain text. Obsidian needs a reload for this to take full effect. |
+
 ## Installation
 
 ### From Obsidian Community Plugins
@@ -125,4 +139,4 @@ npm test       # run tests
 
 ## License
 
-Apache 2.0
+MIT — see [LICENSE](LICENSE).
