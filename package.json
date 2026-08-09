@@ -1,6 +1,6 @@
 {
   "name": "obsidian-sheet-navigator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Single-column drill-down navigator with content previews for Obsidian",
   "main": "main.js",
   "scripts": {
