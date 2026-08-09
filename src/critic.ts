@@ -216,6 +216,9 @@ function simple(
   };
 }
 
+/** A blank line ends a paragraph, and no construct may cross one. */
+const BLANK_LINE = /\n[ \t]*\n/;
+
 function scanCritic(content: string, skip: Range[]): Raw[] {
   const out: Raw[] = [];
   CRITIC_RE.lastIndex = 0;
@@ -223,6 +226,19 @@ function scanCritic(content: string, skip: Range[]): Raw[] {
   for (let m = CRITIC_RE.exec(content); m !== null; m = CRITIC_RE.exec(content)) {
     const from = m.index;
     const to = from + m[0].length;
+
+    // An opening marker that only finds its partner several paragraphs later
+    // is a typo, not a construct — and honouring it would swallow whole
+    // paragraphs. Reading view cannot see across a block boundary either, so
+    // refusing here is also what keeps the two display modes agreeing.
+    //
+    // Resume one character in rather than past the match: a real construct
+    // sitting inside the rejected span still has to be found.
+    if (BLANK_LINE.test(m[0])) {
+      CRITIC_RE.lastIndex = from + 1;
+      continue;
+    }
+
     if (overlaps(skip, from, to)) continue;
 
     if (m[1] !== undefined) {

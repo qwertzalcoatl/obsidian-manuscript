@@ -167,6 +167,26 @@ describe('parseCritic — tolerance', () => {
     expect(e.comment).toBe('erste Zeile\nzweite Zeile');
   });
 
+  it('reads a construct wrapped across a soft line break', () => {
+    const e = one('Ein {--alter\nText--} hier.');
+    expect(e.quote).toBe('alter\nText');
+  });
+
+  // Reading view groups text by block and cannot see across a paragraph
+  // boundary; if the parser could, the two display modes would disagree. It
+  // also bounds the damage of a stray opening marker.
+  it('refuses a construct that crosses a blank line', () => {
+    expect(parseCritic('Ein {++neuer\n\nAbsatz++} hier.')).toEqual([]);
+    expect(parseCritic('{>>oben\n\nunten<<}')).toEqual([]);
+  });
+
+  it('still finds a real construct inside a rejected span', () => {
+    const entries = parseCritic('{++ vergessen\n\nspäter {--echt--} hier ++}');
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe('deletion');
+    expect(entries[0].quote).toBe('echt');
+  });
+
   it('reads two adjacent constructs as two entries, not a substitution', () => {
     const entries = parseCritic('{--alt--}{++neu++}');
     expect(entries.map((e) => e.kind)).toEqual(['deletion', 'insertion']);
