@@ -10,7 +10,14 @@
 // its normal colour throughout; coloured prose is hard to read, and the
 // decoration already carries the meaning.
 
-import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
+import {
+  MapMode,
+  StateEffect,
+  StateField,
+  type EditorSelection,
+  type EditorState,
+  type Extension,
+} from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { setIcon } from 'obsidian';
 import { parseCritic, type Entry, type Range } from './critic';
@@ -80,6 +87,56 @@ class CommentGlyph extends WidgetType {
 
 const HIDDEN = Decoration.replace({});
 
+// ─── Repair mode ───
+
+/**
+ * Sets — or with null, clears — the one construct showing its raw source.
+ *
+ * Only one at a time: the point of showing braces is to fix a construct that
+ * has gone wrong, and a note with several unfolded at once is just a note
+ * full of braces again.
+ */
+export const unfoldEffect = StateEffect.define<Range | null>();
+
+/**
+ * Which construct, if any, is showing its raw source.
+ *
+ * Deliberately a range rather than an index into the parse: a range maps
+ * itself forward through edits and never has to consult criticField, which is
+ * what keeps the two fields independent. Reading the parse from here would
+ * make the pair circular, since the decorations already read both.
+ */
+export const unfoldField = StateField.define<Range | null>({
+  create: () => null,
+  update(value, tr) {
+    let next = value;
+
+    if (next !== null && tr.docChanged) {
+      const from = tr.changes.mapPos(next.from, 1, MapMode.TrackDel);
+      const to = tr.changes.mapPos(next.to, -1, MapMode.TrackDel);
+      next = from === null || to === null || to <= from ? null : { from, to };
+    }
+
+    for (const e of tr.effects) if (e.is(unfoldEffect)) next = e.value;
+
+    // Folds itself back the moment the caret leaves. Without this a forgotten
+    // unfold leaves braces sitting in the prose for the rest of the session,
+    // which is exactly the state this whole feature exists to prevent.
+    if (next !== null && !touches(tr.state.selection, next)) next = null;
+
+    return next;
+  },
+});
+
+function touches(selection: EditorSelection, range: Range): boolean {
+  return selection.ranges.some((r) => r.from <= range.to && r.to >= range.from);
+}
+
+/** True when `entry` is the construct currently showing its raw source. */
+function isRevealed(unfold: Range | null, entry: Entry): boolean {
+  return unfold !== null && unfold.from <= entry.from && unfold.to >= entry.to;
+}
+
 /**
  * Every decoration the editor paints for a document, derived from nothing but
  * the state passed in.
@@ -90,13 +147,14 @@ const HIDDEN = Decoration.replace({});
  */
 export function criticDecorations(state: EditorState): DecorationSet {
   const ranges: { from: number; to: number; value: Decoration }[] = [];
+  const unfold = state.field(unfoldField);
 
   for (const entry of state.field(criticField)) {
-    // Standard Live Preview behaviour: put the cursor in a construct and its
-    // raw markers come back, so the markup stays editable by hand.
-    const revealed = state.selection.ranges.some(
-      (r) => r.from <= entry.to && r.to >= entry.from
-    );
+    // Never the caret's doing. Marked-up prose is prose you edit in place, so
+    // clicking into it must not turn the line into syntax under the cursor —
+    // that is the whole point of the feature. Only the repair command opens a
+    // construct, and only until the caret leaves it.
+    const revealed = isRevealed(unfold, entry);
 
     const mark = (r: Range | null, cls: string) => {
       if (!nonEmpty(r) || !cls) return;
@@ -242,25 +300,24 @@ export function flashEntry(view: EditorView, entry: Entry): void {
 }
 
 /**
- * @param onReveal Called with an entry's start offset when the reader presses
- *   anywhere inside it — decorated text or comment glyph alike. Handling this
- *   at the view level rather than on the widget covers both with one listener
- *   and keeps the press from being swallowed: the caret still moves.
+ * @param onReveal Called with an entry's start offset when the reader clicks
+ *   anywhere inside it. Handling this at the view level rather than per span
+ *   covers every construct with one listener, and returning false keeps the
+ *   press from being swallowed: the caret still moves, which is now the
+ *   primary thing a click into markup is for.
+ *
+ *   Deliberately does not open the Review drawer — see focusReviewCard in
+ *   main.ts. Clicking into marked-up prose is how a sentence gets written
+ *   now, not a request to review anything.
  */
 export function criticEditorExtension(onReveal: (offset: number) => void): Extension {
   return [
+    unfoldField,
     criticField,
-    EditorView.decorations.compute([criticField, 'selection'], criticDecorations),
+    EditorView.decorations.compute([criticField, unfoldField, 'selection'], criticDecorations),
     flashField,
     EditorView.domEventHandlers({
-      mousedown(event, view) {
-        // Deliberately mousedown, not click. Revealing the construct rebuilds
-        // the line's DOM under the pressed button, and the browser swallows
-        // the click entirely when the pressed element does not survive to
-        // mouseup — so a click handler misses exactly the first press on a
-        // folded construct. This runs before CodeMirror's own handler moves
-        // the caret, so the layout — and these coordinates — are still the
-        // folded ones the reader aimed at.
+      click(event, view) {
         if (event.button !== 0) return false;
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         if (pos === null) return false;

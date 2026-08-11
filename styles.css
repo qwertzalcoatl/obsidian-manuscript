@@ -414,30 +414,22 @@
   text-decoration: none;
 }
 
-/* With the cursor inside, the raw markup comes back as prose-coloured text on
-   the prose line. A faint wash over the whole construct — braces, comment
-   body and all — says where markup ends and the sentence resumes. Weaker
-   than .sn-critic-highlight, so a real highlight stays the stronger object. */
+/* Repair mode. The raw markup is back on the line as prose-coloured text, so
+   a faint wash over the whole construct — braces, comment body and all — says
+   where markup ends and the sentence resumes. Weaker than
+   .sn-critic-highlight, so a real highlight stays the stronger object. */
 .sn-critic-revealed {
   background-color: color-mix(in srgb, var(--text-accent) 7%, transparent);
   border-radius: 2px;
 }
 
-/* In the editor a click on decorated text focuses the construct's card in the
-   drawer, so the folded form advertises that the way the glyph does. Scoped
-   to .cm-content because Reading view reuses these classes without offering
-   a click. */
+/* Marked-up text is editable prose now, not a click target: the caret goes
+   into it and types, and the click that places the caret also focuses the
+   drawer card as a side effect. An I-beam is what that deserves. Scoped to
+   .cm-content because Reading view has no caret at all. */
 .cm-content .sn-critic-insertion,
 .cm-content .sn-critic-deletion,
 .cm-content .sn-critic-highlight {
-  cursor: pointer;
-}
-
-/* Revealed markup is text being edited by hand, so the I-beam wins there.
-   Two selectors because CodeMirror may nest the construct-wide span outside
-   or inside the quote spans; the second out-specifies the pointer rule. */
-.cm-content .sn-critic-revealed,
-.cm-content .sn-critic-revealed :is(.sn-critic-insertion, .sn-critic-deletion, .sn-critic-highlight) {
   cursor: text;
 }
 

@@ -17,6 +17,8 @@ import {
   flashEffect,
   flashField,
   flashRangesFor,
+  unfoldEffect,
+  unfoldField,
 } from './critic-render';
 import { parseCritic } from './critic';
 
@@ -32,10 +34,15 @@ interface Painted {
 function paint(doc: string, cursor?: number): Painted[] {
   const state = EditorState.create({
     doc,
-    extensions: [criticField],
+    extensions: [unfoldField, criticField],
     ...(cursor === undefined ? {} : { selection: { anchor: cursor } }),
   });
 
+  return painted(state, doc);
+}
+
+/** Reads a state's decorations out as plain data. */
+function painted(state: EditorState, doc: string): Painted[] {
   const out: Painted[] = [];
   criticDecorations(state).between(0, doc.length, (from, to, value) => {
     out.push({
@@ -46,6 +53,23 @@ function paint(doc: string, cursor?: number): Painted[] {
     });
   });
   return out;
+}
+
+/** Paints `doc` with the construct at `at` unfolded to its raw source. */
+function paintUnfolded(doc: string, at: number): Painted[] {
+  const base = EditorState.create({
+    doc,
+    extensions: [unfoldField, criticField],
+    selection: { anchor: at },
+  });
+  const entry = base.field(criticField).find((e) => at >= e.from && at <= e.to);
+  if (!entry) throw new Error(`no construct at offset ${at} in ${JSON.stringify(doc)}`);
+
+  const state = base.update({
+    effects: unfoldEffect.of({ from: entry.from, to: entry.to }),
+  }).state;
+
+  return painted(state, doc);
 }
 
 /** Text as the reader sees it: hidden and replaced ranges taken out. */
@@ -114,7 +138,7 @@ describe('Live Preview decorations — native ~~ strikethrough is cancelled', ()
     );
   });
 
-  it('keeps the construct mark while the cursor reveals the markup', () => {
+  it('keeps the construct mark with the cursor inside', () => {
     expect(paint(doc, 6)).toContainEqual(
       expect.objectContaining({ cls: 'sn-critic-substitution', text: '{~~kalte~>fahle~~}' })
     );
@@ -125,52 +149,102 @@ describe('Live Preview decorations — native ~~ strikethrough is cancelled', ()
   });
 });
 
-describe('Live Preview decorations — revealed markup stands apart from prose', () => {
-  const doc = 'Sie {++leise ++}ging.';
+describe('Live Preview decorations — the caret never reveals markup', () => {
+  it('keeps an insertion folded with the cursor inside its text', () => {
+    expect(visible('Sie {++leise ++}ging.', 8)).toBe('Sie leise ging.');
+  });
 
-  it('washes the whole construct while the cursor is inside', () => {
-    expect(paint(doc, 8)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{++leise ++}' })
+  it('keeps a substitution folded with the cursor in the replacement', () => {
+    expect(visible('Das {~~kalte~>fahle~~} Licht.', 15)).toBe('Das kaltefahle Licht.');
+  });
+
+  it('keeps an annotation folded with the cursor in the anchored text', () => {
+    expect(visible('Sie {==ging==}{>>warum?<<} fort.', 9)).toBe('Sie ging fort.');
+  });
+
+  it('keeps markers folded with the cursor on either boundary', () => {
+    const doc = 'Sie {++leise ++}ging.';
+    expect(visible(doc, doc.indexOf('{++'))).toBe('Sie leise ging.');
+    expect(visible(doc, doc.indexOf('++}') + 3)).toBe('Sie leise ging.');
+  });
+
+  it('paints no wash from the cursor alone', () => {
+    expect(paint('Sie {++leise ++}ging.', 8).map((d) => d.cls)).not.toContain(
+      'sn-critic-revealed'
     );
   });
 
-  it('adds no wash while the markup is folded away', () => {
-    expect(paint(doc, 0).map((d) => d.cls)).not.toContain('sn-critic-revealed');
-  });
-
-  it('washes a revealed comment, braces and body alike', () => {
-    const commented = 'Sie ging.{>>warum?<<}';
-    expect(paint(commented, 12)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{>>warum?<<}' })
+  it('keeps styling the text, so the edit stays legible while typing in it', () => {
+    expect(paint('Sie {++leise ++}ging.', 8)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'leise ' })
     );
   });
 });
 
-describe('Live Preview decorations — cursor reveals the raw markup', () => {
+describe('Live Preview decorations — the unfold effect reveals markup', () => {
   const doc = 'Sie {++leise ++}ging.';
 
-  it('hides markers when the cursor is elsewhere', () => {
-    expect(visible(doc, 0)).toBe('Sie leise ging.');
+  it('shows the raw source of the unfolded construct', () => {
+    const hidden = paintUnfolded(doc, 8)
+      .filter((d) => d.cls === '')
+      .map((d) => d.text);
+    expect(hidden).toEqual([]);
   });
 
-  it('shows markers when the cursor is inside the construct', () => {
-    expect(visible(doc, 8)).toBe(doc);
-  });
-
-  it('shows markers when the cursor sits on either boundary', () => {
-    expect(visible(doc, doc.indexOf('{++'))).toBe(doc);
-    expect(visible(doc, doc.indexOf('++}') + 3)).toBe(doc);
-  });
-
-  it('keeps styling the text while revealed, so the edit stays legible', () => {
-    expect(paint(doc, 8)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'leise ' })
+  it('washes the whole construct, braces and all', () => {
+    expect(paintUnfolded(doc, 8)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{++leise ++}' })
     );
   });
 
-  it('reveals only the construct the cursor is in', () => {
-    const two = '{--a--} und {--b--}';
-    expect(visible(two, 3)).toBe('{--a--} und b');
+  it('washes a revealed comment, braces and body alike', () => {
+    expect(paintUnfolded('Sie ging.{>>warum?<<}', 12)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{>>warum?<<}' })
+    );
+  });
+
+  it('leaves every other construct folded', () => {
+    const two = 'Sie {++leise ++}ging {--fort--}.';
+    const hidden = paintUnfolded(two, 8)
+      .filter((d) => d.cls === '')
+      .map((d) => d.text);
+    expect(hidden).toEqual(['{--', '--}']);
+  });
+});
+
+describe('unfoldField — what folds it back', () => {
+  const doc = 'Sie {++leise ++}ging.';
+  const unfolded = () =>
+    EditorState.create({ doc, extensions: [unfoldField], selection: { anchor: 8 } }).update({
+      effects: unfoldEffect.of({ from: 4, to: 16 }),
+    }).state;
+
+  it('starts folded', () => {
+    expect(EditorState.create({ doc, extensions: [unfoldField] }).field(unfoldField)).toBeNull();
+  });
+
+  it('holds the range the effect set', () => {
+    expect(unfolded().field(unfoldField)).toEqual({ from: 4, to: 16 });
+  });
+
+  it('folds back when the selection leaves', () => {
+    const moved = unfolded().update({ selection: { anchor: 0 } }).state;
+    expect(moved.field(unfoldField)).toBeNull();
+  });
+
+  it('stays open while the selection is still inside', () => {
+    const moved = unfolded().update({ selection: { anchor: 10 } }).state;
+    expect(moved.field(unfoldField)).toEqual({ from: 4, to: 16 });
+  });
+
+  it('follows text inserted above it', () => {
+    const edited = unfolded().update({ changes: { from: 0, insert: 'Neu. ' } }).state;
+    expect(edited.field(unfoldField)).toEqual({ from: 9, to: 21 });
+  });
+
+  it('folds back when the construct is deleted out from under it', () => {
+    const edited = unfolded().update({ changes: { from: 0, to: 21, insert: '' } }).state;
+    expect(edited.field(unfoldField)).toBeNull();
   });
 });
 
@@ -278,15 +352,11 @@ describe('Live Preview decorations — after an edit', () => {
   it('re-parses so offsets follow text inserted above', () => {
     const start = EditorState.create({
       doc: 'Sie {--ging--} fort.',
-      extensions: [criticField],
+      extensions: [unfoldField, criticField],
     });
     const after = start.update({ changes: { from: 0, insert: 'Neue Zeile\n' } }).state;
 
-    const doc = after.doc.toString();
-    const marks: Painted[] = [];
-    criticDecorations(after).between(0, doc.length, (from, to, value) => {
-      marks.push({ from, to, cls: (value.spec.class as string) ?? '', text: doc.slice(from, to) });
-    });
+    const marks = painted(after, after.doc.toString());
 
     expect(marks).toContainEqual(
       expect.objectContaining({ cls: 'sn-critic-deletion', text: 'ging' })
