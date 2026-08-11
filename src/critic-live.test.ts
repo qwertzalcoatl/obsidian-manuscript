@@ -514,6 +514,20 @@ describe('lineCollapseRange — a comment that owned its line takes it along', (
   it('leaves a comment that is the only line in the note', () => {
     expect(collapse('{>>Mehr Luft<<}')).toBeNull();
   });
+
+  it('takes both lines when the comment runs across two', () => {
+    expect(collapse('Sie ging.\n{>>Mehr Luft\nim Absatz<<}\nDann Stille.')).toBe(
+      '\n{>>Mehr Luft\nim Absatz<<}'
+    );
+  });
+
+  it('leaves a two-line comment with prose after it on the last line', () => {
+    expect(collapse('Sie ging.\n{>>Mehr Luft\nim Absatz<<} Dann Stille.')).toBeNull();
+  });
+
+  it('leaves a two-line comment with prose before it on the first line', () => {
+    expect(collapse('Sie ging. {>>Mehr Luft\nim Absatz<<}\nDann Stille.')).toBeNull();
+  });
 });
 
 describe('Live Preview decorations — an unanchored comment on its own line', () => {

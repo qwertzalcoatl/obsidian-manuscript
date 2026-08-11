@@ -272,26 +272,33 @@ function visibleSpanOf(state: EditorState, entry: Entry): Range {
 }
 
 /**
- * The line an unanchored comment should take with it, or null.
+ * The line — or lines — an unanchored comment should take with it, or null.
  *
  * Hiding only the construct would leave a blank line mid-paragraph — more
  * conspicuous than the glyph this replaced. The same rule applyEdits already
  * applies in critic.ts when such a comment is resolved: an edit that empties
  * the line it sits on takes the line with it.
  *
- * Takes the newline before the line where there is one, so the paragraphs
+ * Read from the first line to the last, because a note can run across several
+ * of them. Reading only the line at `from` looks right and is not: the suffix
+ * test then slices past the end of that line, gets an empty string, agrees the
+ * line is clear, and collapses the first while the rest stays on screen as raw
+ * markup.
+ *
+ * Takes the newline before the block where there is one, so the paragraphs
  * above and below close up rather than trading one gap for another. A comment
- * that is the only line in the note keeps its line: there is nothing to close.
+ * that is the whole note keeps its line: there is nothing to close.
  */
 export function lineCollapseRange(state: EditorState, entry: Entry): Range | null {
   if (entry.kind !== 'comment') return null;
 
-  const line = state.doc.lineAt(entry.from);
-  if (line.text.slice(0, entry.from - line.from).trim() !== '') return null;
-  if (line.text.slice(entry.to - line.from).trim() !== '') return null;
+  const first = state.doc.lineAt(entry.from);
+  const last = state.doc.lineAt(entry.to);
+  if (first.text.slice(0, entry.from - first.from).trim() !== '') return null;
+  if (last.text.slice(entry.to - last.from).trim() !== '') return null;
 
-  if (line.from > 0) return { from: line.from - 1, to: line.to };
-  if (line.to < state.doc.length) return { from: line.from, to: line.to + 1 };
+  if (first.from > 0) return { from: first.from - 1, to: last.to };
+  if (last.to < state.doc.length) return { from: first.from, to: last.to + 1 };
   return null;
 }
 
