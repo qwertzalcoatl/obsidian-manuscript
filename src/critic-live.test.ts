@@ -11,7 +11,13 @@
  */
 
 import { EditorState } from '@codemirror/state';
-import { criticField, flashEffect, flashField, flashRangesFor } from './critic-render';
+import {
+  criticDecorations,
+  criticField,
+  flashEffect,
+  flashField,
+  flashRangesFor,
+} from './critic-render';
 import { parseCritic } from './critic';
 
 interface Painted {
@@ -22,7 +28,7 @@ interface Painted {
   text: string;
 }
 
-/** Every decoration the field produces for `doc`, with an optional cursor. */
+/** Every decoration the renderer produces for `doc`, with an optional cursor. */
 function paint(doc: string, cursor?: number): Painted[] {
   const state = EditorState.create({
     doc,
@@ -31,16 +37,14 @@ function paint(doc: string, cursor?: number): Painted[] {
   });
 
   const out: Painted[] = [];
-  state
-    .field(criticField)
-    .decorations.between(0, doc.length, (from, to, value) => {
-      out.push({
-        from,
-        to,
-        cls: (value.spec.class as string) ?? '',
-        text: doc.slice(from, to),
-      });
+  criticDecorations(state).between(0, doc.length, (from, to, value) => {
+    out.push({
+      from,
+      to,
+      cls: (value.spec.class as string) ?? '',
+      text: doc.slice(from, to),
     });
+  });
   return out;
 }
 
@@ -280,7 +284,7 @@ describe('Live Preview decorations — after an edit', () => {
 
     const doc = after.doc.toString();
     const marks: Painted[] = [];
-    after.field(criticField).decorations.between(0, doc.length, (from, to, value) => {
+    criticDecorations(after).between(0, doc.length, (from, to, value) => {
       marks.push({ from, to, cls: (value.spec.class as string) ?? '', text: doc.slice(from, to) });
     });
 
@@ -295,6 +299,6 @@ describe('Live Preview decorations — after an edit', () => {
       extensions: [criticField],
     });
     const after = start.update({ changes: { from: 0, to: 10, insert: 'ging' } }).state;
-    expect(after.field(criticField).entries).toEqual([]);
+    expect(after.field(criticField)).toEqual([]);
   });
 });

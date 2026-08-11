@@ -80,10 +80,18 @@ class CommentGlyph extends WidgetType {
 
 const HIDDEN = Decoration.replace({});
 
-function decorate(entries: Entry[], state: EditorState): DecorationSet {
+/**
+ * Every decoration the editor paints for a document, derived from nothing but
+ * the state passed in.
+ *
+ * Pure rather than a method on the field so the reveal rule is checkable
+ * without an EditorView, and so the field below can cache the parse without
+ * also owning the question of what gets painted.
+ */
+export function criticDecorations(state: EditorState): DecorationSet {
   const ranges: { from: number; to: number; value: Decoration }[] = [];
 
-  for (const entry of entries) {
+  for (const entry of state.field(criticField)) {
     // Standard Live Preview behaviour: put the cursor in a construct and its
     // raw markers come back, so the markup stays editable by hand.
     const revealed = state.selection.ranges.some(
@@ -146,32 +154,20 @@ function decorate(entries: Entry[], state: EditorState): DecorationSet {
   );
 }
 
-interface CriticValue {
-  entries: Entry[];
-  decorations: DecorationSet;
-}
-
-function build(state: EditorState): CriticValue {
-  const text = state.doc.toString();
-  const entries = mightHaveMarkup(text) ? parseCritic(text) : [];
-  return { entries, decorations: decorate(entries, state) };
-}
-
 /**
  * The whole document is re-parsed on every edit rather than just the viewport:
  * deciding whether an offset sits inside a code fence needs the lines above it,
  * and a scene file is small enough that the honest answer is also the fast one.
- * Cursor movement reuses the cached parse and only rebuilds decorations.
  */
-export const criticField = StateField.define<CriticValue>({
-  create: build,
-  update(value, tr) {
-    if (tr.docChanged) return build(tr.state);
-    if (tr.selection) return { entries: value.entries, decorations: decorate(value.entries, tr.state) };
-    return value;
-  },
-  provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
+export const criticField = StateField.define<Entry[]>({
+  create: (state) => parse(state),
+  update: (value, tr) => (tr.docChanged ? parse(tr.state) : value),
 });
+
+function parse(state: EditorState): Entry[] {
+  const text = state.doc.toString();
+  return mightHaveMarkup(text) ? parseCritic(text) : [];
+}
 
 // ─── Card-click flash ───
 
@@ -254,6 +250,7 @@ export function flashEntry(view: EditorView, entry: Entry): void {
 export function criticEditorExtension(onReveal: (offset: number) => void): Extension {
   return [
     criticField,
+    EditorView.decorations.compute([criticField, 'selection'], criticDecorations),
     flashField,
     EditorView.domEventHandlers({
       mousedown(event, view) {
@@ -267,9 +264,7 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
         if (event.button !== 0) return false;
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         if (pos === null) return false;
-        const hit = view.state
-          .field(criticField)
-          .entries.find((e) => pos >= e.from && pos <= e.to);
+        const hit = view.state.field(criticField).find((e) => pos >= e.from && pos <= e.to);
         if (hit) onReveal(hit.from);
         return false;
       },
