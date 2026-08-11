@@ -632,7 +632,13 @@
    On a comment card the comment IS the payload, not an annotation on one, so
    muting it would wash out the only thing there is to read. The hierarchy
    against the quote comes from the monospace/prose contrast and the accent
-   bar instead, which costs nothing in legibility. */
+   bar instead, which costs nothing in legibility.
+
+   It is also prose you edit, not a label — the same change the editor pane
+   made for marked-up text, for the same reason. The hover tint is what says so
+   before the click: an I-beam alone is easy to miss in a sidebar. The negative
+   margin keeps the tinted box aligned with the text above it rather than
+   inset by its own padding. */
 .sheet-review-comment {
   font-family: var(--font-text);
   font-size: 13px;
@@ -640,6 +646,47 @@
   color: var(--text-normal);
   margin-top: 6px;
   word-break: break-word;
+  cursor: text;
+  margin-inline: -4px;
+  padding-inline: 4px;
+  border-radius: 4px;
+}
+
+.sheet-review-comment:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* Invisible as a control. Committing a note should change nothing on screen
+   except where the caret is, so the field borrows every measurement from the
+   note it stands in for and brings no chrome of its own. The placeholder is
+   the only thing that marks an empty one — which is the state the comment
+   command opens. Height comes from grow() in review-view.ts. */
+.sheet-review-comment-input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+  overflow: hidden;
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-normal);
+}
+
+.sheet-review-comment-input:focus,
+.sheet-review-comment-input:focus-visible {
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.sheet-review-comment-input::placeholder {
+  color: var(--text-faint);
 }
 
 /* Hidden until wanted, the way the navigator's drag handle is: forty cards

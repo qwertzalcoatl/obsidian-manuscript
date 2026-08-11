@@ -21,6 +21,7 @@ import {
   parseCritic,
   renderAccepted,
   renderRejected,
+  setComment,
   type Entry,
   type Mode,
 } from './critic';
@@ -64,6 +65,29 @@ interface Card {
   raw: string;
 }
 
+/**
+ * Whether the source still says what the card was built from.
+ *
+ * Two independent checks, because the cost of being wrong here is a silently
+ * mangled manuscript: the bytes at those offsets must still be identical, and
+ * a fresh parse of the live text must still agree that an entry of this kind
+ * lives exactly there.
+ */
+function stillThere(content: string, card: Card): boolean {
+  return (
+    content.slice(card.entry.from, card.entry.to) === card.raw &&
+    parseCritic(content).some(
+      (e) => e.from === card.entry.from && e.to === card.entry.to && e.kind === card.entry.kind
+    )
+  );
+}
+
+/** Height follows the text: a note is read whole or it is not read. */
+function grow(field: HTMLTextAreaElement): void {
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight}px`;
+}
+
 export class ReviewView extends ItemView {
   private headerEl!: HTMLElement;
   private listEl!: HTMLElement;
@@ -76,6 +100,16 @@ export class ReviewView extends ItemView {
    * click just applied would vanish on the next repaint, however triggered.
    */
   private focusedOffset: number | null = null;
+  /**
+   * The note being written, and its text so far.
+   *
+   * Keyed on the entry's start offset, the same key focusedOffset uses,
+   * because every repaint builds new elements — the field has to be a product
+   * of painting rather than something applied afterwards. That is what the
+   * comment command needs: it writes markup, waits for the reload, and only
+   * then is there a card to type into.
+   */
+  private editing: { offset: number; draft: string } | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -163,8 +197,30 @@ export class ReviewView extends ItemView {
     return readLiveContent(this.app, file);
   }
 
+  /** Fire-and-forget reload, for the events and the callers that cannot await. */
   refresh(): void {
+    void this.load();
+  }
+
+  /**
+   * Re-reads the sheet and repaints.
+   *
+   * Awaitable because opening a note field has to happen after the read that
+   * produced its card: the comment command writes the markup, and the card to
+   * type into does not exist until the drawer has parsed the text again.
+   *
+   * A reload while a field is open is dropped rather than deferred — it would
+   * rebuild the textarea out from under the keystrokes, which is the same bug
+   * focusedOffset exists for with a worse ending. Closing the field always
+   * reloads, so nothing stays stale longer than a note takes to write, and
+   * what goes stale meanwhile is the other cards. The guard sits here rather
+   * than in requestRefresh because act() and the plugin's refreshViews both
+   * call refresh directly.
+   */
+  async load(): Promise<void> {
     this.cancelRefresh();
+    if (this.editing !== null) return;
+
     const file = this.app.workspace.getActiveFile();
     const next = file && file.extension === 'md' ? file : null;
     // Offsets from one note mean nothing in another.
@@ -178,26 +234,30 @@ export class ReviewView extends ItemView {
     }
 
     const target = this.file;
-    void this.readContent(target).then(
-      (content) => {
-        if (this.file?.path !== target.path) return; // a newer refresh owns the view
-        this.cards = parseCritic(content).map((entry) => ({
-          entry,
-          raw: content.slice(entry.from, entry.to),
-        }));
-        this.paint();
-      },
-      (err) => {
-        console.error('Sheet Navigator: could not read the sheet for review', err);
-        this.cards = [];
-        this.paint();
-      }
-    );
+    try {
+      const content = await this.readContent(target);
+      if (this.file?.path !== target.path) return; // a newer reload owns the view
+      this.cards = parseCritic(content).map((entry) => ({
+        entry,
+        raw: content.slice(entry.from, entry.to),
+      }));
+    } catch (err) {
+      console.error('Sheet Navigator: could not read the sheet for review', err);
+      this.cards = [];
+    }
+    this.paint();
   }
 
   // ─── Painting ───
 
   private paint(): void {
+    // A field cannot outlive its card. Without this a stale record would
+    // suppress every reload for the rest of the session.
+    const open = this.editing;
+    if (open !== null && !this.cards.some((c) => c.entry.from === open.offset)) {
+      this.editing = null;
+    }
+
     this.paintHeader();
     this.listEl.empty();
 
@@ -229,6 +289,20 @@ export class ReviewView extends ItemView {
       );
       this.listEl.children[index]?.addClass('is-focused');
     }
+
+    // The field is rebuilt with everything else, so it is re-focused here:
+    // focus() on an element that is not yet in the document does nothing, and
+    // the cards were appended a moment ago.
+    if (this.editing !== null) {
+      const offset = this.editing.offset;
+      const index = this.cards.findIndex((c) => c.entry.from === offset);
+      const field = this.listEl.children[index]?.querySelector('textarea');
+      if (field instanceof HTMLTextAreaElement) {
+        grow(field);
+        field.focus();
+        field.setSelectionRange(field.value.length, field.value.length);
+      }
+    }
   }
 
   private paintHeader(): void {
@@ -258,8 +332,18 @@ export class ReviewView extends ItemView {
     const quote = el.createDiv({ cls: 'sheet-review-quote' });
     this.paintQuote(quote, entry);
 
-    if (entry.comment) {
-      el.createDiv({ cls: 'sheet-review-comment' }).setText(entry.comment);
+    if (this.editing?.offset === entry.from) {
+      this.buildNoteField(el, card);
+    } else if (entry.comment) {
+      const note = el.createDiv({ cls: 'sheet-review-comment' });
+      note.setText(entry.comment);
+      note.addEventListener('click', (e) => {
+        // Not the card's own click. reveal() dispatches into the editor, and
+        // if that took focus the field would blur, commit and close itself —
+        // a click that undoes its own effect.
+        e.stopPropagation();
+        void this.openNote(entry.from);
+      });
     }
 
     const actions = el.createDiv({ cls: 'sheet-review-actions' });
@@ -276,6 +360,10 @@ export class ReviewView extends ItemView {
     const reveal = () => this.reveal(card);
     el.addEventListener('click', reveal);
     el.addEventListener('keydown', (e: KeyboardEvent) => {
+      // Only the card's own keys. The textarea inside it sends Space and Enter
+      // up here too, where preventDefault would eat a word break and scroll
+      // the editor instead of typing.
+      if (e.target !== el) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         reveal();
@@ -313,6 +401,39 @@ export class ReviewView extends ItemView {
           ? 'sn-critic-deletion'
           : 'sn-critic-highlight';
     span(entry.quote.trim(), cls);
+  }
+
+  /**
+   * The note field: a textarea that looks like the note it stands in for.
+   *
+   * Enter breaks a line, because a note is prose and sometimes wants two of
+   * them. ⌘↵ and clicking away commit; Escape restores what was stored. The
+   * draft is mirrored into `editing` on every keystroke, so a repaint we asked
+   * for can put the text back.
+   */
+  private buildNoteField(parent: HTMLElement, card: Card): void {
+    const field = parent.createEl('textarea', { cls: 'sheet-review-comment-input' });
+    field.value = this.editing?.draft ?? '';
+    field.rows = 1;
+    field.placeholder = 'Write a note…';
+
+    field.addEventListener('click', (e) => e.stopPropagation());
+    field.addEventListener('input', () => {
+      if (this.editing !== null) this.editing.draft = field.value;
+      grow(field);
+    });
+    field.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeNote(card, false);
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeNote(card, true);
+      }
+    });
+    field.addEventListener('blur', () => this.closeNote(card, true));
   }
 
   private addButton(
@@ -353,18 +474,8 @@ export class ReviewView extends ItemView {
       return;
     }
 
-    // Two independent checks, because the cost of being wrong here is a
-    // silently mangled manuscript: the source at those offsets must still be
-    // byte-identical, and a fresh parse of the live text must still agree that
-    // an entry of this kind lives exactly there.
     const content = view.editor.getValue();
-    const stillThere =
-      content.slice(card.entry.from, card.entry.to) === card.raw &&
-      parseCritic(content).some(
-        (e) => e.from === card.entry.from && e.to === card.entry.to && e.kind === card.entry.kind
-      );
-
-    if (!stillThere) {
+    if (!stillThere(content, card)) {
       new Notice('The note changed — the list has been refreshed. Try again.');
       this.refresh();
       return;
@@ -488,5 +599,67 @@ export class ReviewView extends ItemView {
     el.addClass('is-focused');
     this.focusedOffset = offset;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  /**
+   * Opens the note field on the card covering `offset`, reloading first.
+   *
+   * The reload is why this is async, and why load() is: the comment command
+   * writes markup and then asks for the card, which does not exist until the
+   * drawer has parsed the text again.
+   *
+   * Does nothing when no card covers the offset. That happens when a write
+   * from the field just closed moved the entries along, and clicking again
+   * lands correctly — better than opening a field on the wrong note.
+   */
+  async openNote(offset: number): Promise<void> {
+    // Any open field has already committed on blur; clearing here keeps a
+    // record that should not exist from suppressing the reload below.
+    this.editing = null;
+    await this.load();
+
+    const card = this.cards.find((c) => offset >= c.entry.from && offset < c.entry.to);
+    if (!card) return;
+
+    this.editing = { offset: card.entry.from, draft: card.entry.comment ?? '' };
+    this.paint();
+  }
+
+  /**
+   * Closes the field and writes the result, if writing changes anything.
+   *
+   * Commit and cancel differ only in which text is written back — the draft,
+   * or what was stored. Everything after that is one path, which is what makes
+   * an empty note behave the same either way: setComment removes the
+   * construct, so abandoning the comment command with Escape leaves a plain
+   * highlight rather than a mark promising a note nobody wrote.
+   */
+  private closeNote(card: Card, commit: boolean): void {
+    const editing = this.editing;
+    if (editing === null || editing.offset !== card.entry.from) return;
+
+    const text = commit ? editing.draft : (card.entry.comment ?? '');
+    this.editing = null;
+
+    const file = this.file;
+    const view = file ? this.editorViewFor(file) : null;
+    if (!view) {
+      new Notice('Open this note in an editor to write on its markup.');
+      this.refresh();
+      return;
+    }
+
+    const content = view.editor.getValue();
+    if (!stillThere(content, card)) {
+      new Notice('The note changed — the list has been refreshed. Try again.');
+      this.refresh();
+      return;
+    }
+
+    const next = setComment(content, card.entry, text);
+    // Reloading is what returns the card to its resting state, and what shows
+    // anything that was suppressed while the field was open.
+    if (next === content) this.refresh();
+    else this.write(view, content, next);
   }
 }
