@@ -693,3 +693,43 @@ describe('setComment — writing a note into the source', () => {
     }
   });
 });
+
+describe('the comment command, end to end through the pure layer', () => {
+  // What ⌘⇧M writes, what the drawer then parses, and what committing the
+  // field does — the one sequence in this feature that spans every piece.
+  const WRAP: [string, string] = ['{==', '==}{>><<}'];
+
+  const wrap = (before: string, selection: string, after: string) =>
+    `${before}${WRAP[0]}${selection}${WRAP[1]}${after}`;
+
+  it('leaves a card with an empty note to type into', () => {
+    const content = wrap('Sie ', 'ging', ' fort.');
+    expect(content).toBe('Sie {==ging==}{>><<} fort.');
+
+    const entry = parseCritic(content)[0];
+    expect(entry.kind).toBe('highlight');
+    // Not null: the card must draw a note slot, and setComment must replace a
+    // body rather than insert a construct.
+    expect(entry.comment).toBe('');
+    expect(entry.spans.commentBody).not.toBeNull();
+  });
+
+  it('commits the note into the construct the command wrote', () => {
+    const content = wrap('Sie ', 'ging', ' fort.');
+    const after = setComment(content, parseCritic(content)[0], 'warum ausgerechnet jetzt?');
+    expect(after).toBe('Sie {==ging==}{>>warum ausgerechnet jetzt?<<} fort.');
+    expect(parseCritic(after)[0].comment).toBe('warum ausgerechnet jetzt?');
+  });
+
+  it('leaves a plain highlight when the field is abandoned', () => {
+    const content = wrap('Sie ', 'ging', ' fort.');
+    expect(setComment(content, parseCritic(content)[0], '')).toBe('Sie {==ging==} fort.');
+  });
+
+  it('survives a selection that already spans a line break', () => {
+    const content = wrap('Sie ging.\n', 'Dann Stille', '.');
+    const after = setComment(content, parseCritic(content)[0], 'Absatz kürzen');
+    expect(parseCritic(after)[0].comment).toBe('Absatz kürzen');
+    expect(parseCritic(after)).toHaveLength(1);
+  });
+});
