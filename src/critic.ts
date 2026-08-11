@@ -37,8 +37,18 @@ export interface Spans {
   quote: Range | null;
   /** Substitution only — where the replacement text sits. */
   replacement: Range | null;
-  /** The whole comment construct, markers included — replaced by a glyph. */
+  /** The whole comment construct, markers included. Hidden outright. */
   comment: Range | null;
+  /**
+   * The comment's text alone, inside its markers. Zero-width for an empty
+   * `{>><<}` — so callers test this against null and never for emptiness.
+   *
+   * Reported rather than left to be worked out, because the marker is two
+   * characters for one of Obsidian's own `%%…%%` notes and three for a
+   * CriticMarkup one, and on an attached comment `native` describes the anchor
+   * rather than the note. `{--ging--}%%zu spät?%%` is otherwise inexpressible.
+   */
+  commentBody: Range | null;
 }
 
 /**
@@ -351,9 +361,15 @@ export function parseCritic(content: string): Entry[] {
         comment: raw.quote.trim(),
         line: lineAt(content, raw.from),
         native: raw.native,
-        // The glyph stands in for the whole construct, so its own markers are
-        // not listed separately — they are inside what gets replaced.
-        spans: { markers: [], quote: null, replacement: null, comment: { from: raw.from, to: raw.to } },
+        // The construct is hidden whole, so its own markers are not listed
+        // separately — they are inside what gets replaced.
+        spans: {
+          markers: [],
+          quote: null,
+          replacement: null,
+          comment: { from: raw.from, to: raw.to },
+          commentBody: raw.quoteAt,
+        },
       });
       continue;
     }
@@ -381,6 +397,7 @@ export function parseCritic(content: string): Entry[] {
         quote: raw.quoteAt,
         replacement: raw.replacementAt ?? null,
         comment: attached ? { from: next.from, to: next.to } : null,
+        commentBody: attached ? next.quoteAt : null,
       },
     });
 

@@ -504,3 +504,38 @@ describe('minimalEdit', () => {
     }
   });
 });
+
+describe('parseCritic — where a comment body sits', () => {
+  const bodyOf = (content: string) => {
+    const spans = parseCritic(content)[0].spans;
+    const body = spans.commentBody;
+    return body === null ? null : content.slice(body.from, body.to);
+  };
+
+  it('reports the text inside a standalone comment', () => {
+    expect(bodyOf('{>>Mehr Luft<<}')).toBe('Mehr Luft');
+  });
+
+  it('reports the text inside an attached comment', () => {
+    expect(bodyOf('Sie {--ging--}{>>zu spät?<<} fort.')).toBe('zu spät?');
+  });
+
+  it('reports a zero-width range for an empty note, not null', () => {
+    const spans = parseCritic('Sie {==ging==}{>><<} fort.')[0].spans;
+    expect(spans.commentBody).toEqual({ from: 17, to: 17 });
+  });
+
+  it('reports the two-character markers of a native comment', () => {
+    expect(bodyOf('%%Mehr Luft%%')).toBe('Mehr Luft');
+  });
+
+  it('reports a native note attached to a CriticMarkup anchor', () => {
+    // entry.native describes the anchor here, so nothing else in Entry can
+    // say that this note's markers are two characters rather than three.
+    expect(bodyOf('Sie {--ging--}%%zu spät?%% fort.')).toBe('zu spät?');
+  });
+
+  it('reports null where there is no comment at all', () => {
+    expect(parseCritic('Sie {--ging--} fort.')[0].spans.commentBody).toBeNull();
+  });
+});
