@@ -5,9 +5,9 @@
  * editor view, but the decorations it produces are plain data, so what the
  * reader would see is checkable here rather than only by eye in Obsidian.
  *
- * The cursor-reveal rule is the one worth pinning: get it wrong and the
- * markup becomes uneditable by hand, which is a trap you only notice after
- * typing into a note and finding the braces gone.
+ * The rule worth pinning is that the caret reveals nothing: get it wrong and
+ * marked-up prose stops being editable in place, which is a trap you only
+ * notice after clicking into a sentence and finding braces under the cursor.
  */
 
 import { EditorState } from '@codemirror/state';
@@ -17,6 +17,7 @@ import {
   flashEffect,
   flashField,
   flashRangesFor,
+  hiddenRanges,
   unfoldEffect,
   unfoldField,
 } from './critic-render';
@@ -370,5 +371,55 @@ describe('Live Preview decorations — after an edit', () => {
     });
     const after = start.update({ changes: { from: 0, to: 10, insert: 'ging' } }).state;
     expect(after.field(criticField)).toEqual([]);
+  });
+});
+
+describe('hiddenRanges — what the caret may not enter', () => {
+  const rangesFor = (doc: string, cursor = 0) => {
+    const state = EditorState.create({
+      doc,
+      extensions: [unfoldField, criticField],
+      selection: { anchor: cursor },
+    });
+    return hiddenRanges(state).map((r) => doc.slice(r.from, r.to));
+  };
+
+  it('covers an insertion\'s markers and nothing else', () => {
+    expect(rangesFor('Sie {++leise ++}ging.')).toEqual(['{++', '++}']);
+  });
+
+  it('covers a substitution\'s arrow as well as its braces', () => {
+    expect(rangesFor('Das {~~kalte~>fahle~~} Licht.')).toEqual(['{~~', '~>', '~~}']);
+  });
+
+  it('covers an attached comment whole, anchor markers included', () => {
+    expect(rangesFor('Sie {==ging==}{>>warum?<<} fort.')).toEqual([
+      '{==',
+      '==}',
+      '{>>warum?<<}',
+    ]);
+  });
+
+  it('never covers the quote or the replacement', () => {
+    const doc = 'Das {~~kalte~>fahle~~} Licht.';
+    const covered = hiddenRanges(
+      EditorState.create({ doc, extensions: [unfoldField, criticField] })
+    );
+    expect(covered.some((r) => r.from <= 7 && r.to > 7)).toBe(false); // 'k' of kalte
+    expect(covered.some((r) => r.from <= 14 && r.to > 14)).toBe(false); // 'f' of fahle
+  });
+
+  it('hides nothing in a construct showing its raw source', () => {
+    const doc = 'Sie {++leise ++}ging.';
+    const state = EditorState.create({
+      doc,
+      extensions: [unfoldField, criticField],
+      selection: { anchor: 8 },
+    }).update({ effects: unfoldEffect.of({ from: 4, to: 16 }) }).state;
+    expect(hiddenRanges(state)).toEqual([]);
+  });
+
+  it('finds nothing in a note without markup', () => {
+    expect(rangesFor('Sie ging fort.')).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@
 
 import {
   MapMode,
+  RangeSet,
   StateEffect,
   StateField,
   type EditorSelection,
@@ -227,6 +228,26 @@ function parse(state: EditorState): Entry[] {
   return mightHaveMarkup(text) ? parseCritic(text) : [];
 }
 
+/**
+ * Every range the decorations take off the screen, in document order.
+ *
+ * Fed to EditorView.atomicRanges, so the rule the whole feature rests on —
+ * the caret goes wherever text is visible and is blocked only where text is
+ * hidden — is stated once here rather than implied twice.
+ */
+export function hiddenRanges(state: EditorState): Range[] {
+  const unfold = state.field(unfoldField);
+  const out: Range[] = [];
+
+  for (const entry of state.field(criticField)) {
+    if (isRevealed(unfold, entry)) continue;
+    for (const marker of entry.spans.markers) if (nonEmpty(marker)) out.push(marker);
+    if (nonEmpty(entry.spans.comment)) out.push(entry.spans.comment);
+  }
+
+  return out;
+}
+
 // ─── Card-click flash ───
 
 /**
@@ -315,6 +336,16 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
     unfoldField,
     criticField,
     EditorView.decorations.compute([criticField, unfoldField, 'selection'], criticDecorations),
+    // Cursor motion skips these, so the markers are one step in either
+    // direction instead of several invisible ones. skipAtomicRanges only
+    // moves a position strictly inside a range, so the caret can still rest
+    // at a marker's edge — which is where typing inside a construct starts.
+    EditorView.atomicRanges.of((view) =>
+      RangeSet.of(
+        hiddenRanges(view.state).map((r) => HIDDEN.range(r.from, r.to)),
+        true
+      )
+    ),
     flashField,
     EditorView.domEventHandlers({
       click(event, view) {
