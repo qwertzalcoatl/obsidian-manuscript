@@ -426,6 +426,18 @@
   text-decoration: none;
 }
 
+/* The arrow is hidden, so without this the two halves run together as
+   "kaltefahle". The same glyph the drawer card uses rather than a bare gap:
+   paintQuote exists to make a card and its text look alike, and an arrow in
+   one place against a space in the other would break that. */
+.sn-critic-replacement::before {
+  content: '→';
+  padding: 0 0.25em;
+  color: var(--text-faint);
+  text-decoration: none;
+  border-bottom: none;
+}
+
 /* Repair mode. The raw markup is back on the line as prose-coloured text, so
    a faint wash over the whole construct — braces, comment body and all — says
    where markup ends and the sentence resumes. Weaker than

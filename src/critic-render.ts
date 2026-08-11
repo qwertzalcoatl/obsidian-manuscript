@@ -181,7 +181,11 @@ export function criticDecorations(state: EditorState): DecorationSet {
     }
 
     mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
-    mark(entry.spans.replacement, 'sn-critic-insertion');
+    // The second class is the separator's hook: with the arrow hidden, the two
+    // halves would otherwise run together as "kaltefahle". Carried on the
+    // replacement itself rather than inferred from the construct, so Reading
+    // view — which has no construct-wide wrapper — can use the same rule.
+    mark(entry.spans.replacement, 'sn-critic-insertion sn-critic-replacement');
 
     if (revealed) continue;
 
@@ -572,7 +576,12 @@ export function renderCriticMarkup(root: HTMLElement): void {
         ops.push({ ...entry.spans.quote, op: 'wrap', cls, label });
       }
       if (nonEmpty(entry.spans.replacement)) {
-        ops.push({ ...entry.spans.replacement, op: 'wrap', cls: 'sn-critic-insertion', label });
+        ops.push({
+          ...entry.spans.replacement,
+          op: 'wrap',
+          cls: 'sn-critic-insertion sn-critic-replacement',
+          label,
+        });
       }
       if (nonEmpty(entry.spans.comment)) {
         ops.push({ ...entry.spans.comment, op: 'hide' });

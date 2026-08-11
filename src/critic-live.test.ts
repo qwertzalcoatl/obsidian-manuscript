@@ -109,8 +109,9 @@ describe('Live Preview decorations — markers hidden, text styled', () => {
     expect(marks).toContainEqual(
       expect.objectContaining({ cls: 'sn-critic-deletion', text: 'kalte' })
     );
+    // Two classes: the second is what draws the → the hidden arrow left behind.
     expect(marks).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'fahle' })
+      expect.objectContaining({ cls: 'sn-critic-insertion sn-critic-replacement', text: 'fahle' })
     );
   });
 

@@ -19,7 +19,14 @@ import {
 } from "obsidian";
 import { extractSnippet } from "./text";
 import { parseCritic, renderAccepted, renderRejected } from "./critic";
-import { criticEditorExtension, renderCriticMarkup } from "./critic-render";
+import {
+  criticEditorExtension,
+  criticField,
+  renderCriticMarkup,
+  unfoldEffect,
+  unfoldField,
+} from "./critic-render";
+import type { EditorView as CmEditorView } from "@codemirror/view";
 import { ReviewView, VIEW_TYPE_REVIEW, readLiveContent } from "./review-view";
 import {
   parseItemName,
@@ -1328,6 +1335,34 @@ export default class SheetNavigatorPlugin extends Plugin {
       id: "open-review-panel",
       name: "Open review panel",
       callback: () => void this.activateReviewView(),
+    });
+
+    // The only way to see a brace in this plugin. Everything else keeps the
+    // markup folded, which is right until a construct is malformed — then
+    // there has to be a way in. No default hotkey: ⌘⇧M is the only binding
+    // this plugin claims, and this is a repair tool, not a daily one.
+    this.addCommand({
+      id: "toggle-markup-source",
+      name: "Show markup source at cursor",
+      editorCheckCallback: (checking, editor) => {
+        const cm = (editor as unknown as { cm?: CmEditorView }).cm;
+        if (!cm) return false;
+
+        const pos = cm.state.selection.main.head;
+        const entry = cm.state
+          .field(criticField)
+          .find((e) => pos >= e.from && pos <= e.to);
+        if (!entry) return false;
+
+        if (!checking) {
+          const open = cm.state.field(unfoldField);
+          const showing = open !== null && open.from <= entry.from && open.to >= entry.to;
+          cm.dispatch({
+            effects: unfoldEffect.of(showing ? null : { from: entry.from, to: entry.to }),
+          });
+        }
+        return true;
+      },
     });
 
     // One command per construct the format supports, named so that typing

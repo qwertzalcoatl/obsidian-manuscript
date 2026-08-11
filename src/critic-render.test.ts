@@ -156,3 +156,18 @@ describe('renderCriticMarkup — a construct carrying a note', () => {
     expect(root.querySelector('.sn-critic-has-comment')).toBeNull();
   });
 });
+
+describe('renderCriticMarkup — the substitution separator', () => {
+  it('gives the replacement the hook the arrow is drawn from', () => {
+    const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
+    const replacement = root.querySelector('.sn-critic-replacement');
+    expect(replacement?.textContent).toBe('fahle');
+    expect(replacement?.classList.contains('sn-critic-insertion')).toBe(true);
+  });
+
+  it('leaves a plain insertion without it, so no arrow is drawn', () => {
+    const root = render('<p>Sie {++leise ++}ging.</p>');
+    expect(root.querySelector('.sn-critic-replacement')).toBeNull();
+    expect(root.querySelector('.sn-critic-insertion')?.textContent).toBe('leise ');
+  });
+});

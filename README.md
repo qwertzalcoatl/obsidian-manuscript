@@ -68,6 +68,14 @@ A `{>>Kommentar<<}` written directly after another mark belongs to it and shares
 
 Obsidian's own syntax is read too: `%%Kommentar%%` is a standalone comment, and `==Text==%%Kommentar%%` is a commented highlight. A plain `==Text==` on its own is left alone — that's ordinary markdown, not an editorial mark.
 
+### Editing a marked-up draft
+
+Marked-up prose is prose you edit in place. Click into it and type — the syntax stays out of the way, and you never have to settle a suggestion just to gain typing access to the words around it. Arrow keys step over the hidden markers in one press rather than stalling on characters that aren't there, and a Backspace that would break a mark selects the whole thing first, so a construct cannot quietly degrade into plain text.
+
+Comments live in the drawer, not in the prose. A mark carrying one is drawn with a dotted underline; the note itself is on its card. A comment with no text anchored to it — one Claude left on a line of its own, say — shows in the drawer and the mark count but nowhere on the page.
+
+If a mark ever needs repairing by hand, **Show markup source at cursor** unfolds the one under the caret, braces and all. It folds itself back when you move away. That command is the only thing in the plugin that puts syntax on screen.
+
 ### Working through a pass
 
 Open the drawer from the **Review button** in the navigator toolbar, or the command palette. Each mark becomes a card showing the affected text as the change itself: struck through for a deletion, underlined for an insertion. Click a card to jump to it in the editor.
@@ -91,6 +99,7 @@ Every construct has a command, so the whole format is reachable from the command
 | Suggest replacement… | yes | `{~~alt~>neu~~}` — asks for the new wording |
 | Accept all markup in this note | no | resolves everything, keeping the suggestions |
 | Reject all markup in this note | no | resolves everything, turning them all down |
+| Show markup source at cursor | no | unfolds the mark under the caret for repair |
 | Open review panel | no | — |
 
 The four wrapping commands are also on the editor's right-click menu. Nothing in your note is ever modified unless you invoke one of these.
