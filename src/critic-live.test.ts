@@ -11,7 +11,8 @@
  */
 
 import { EditorState } from '@codemirror/state';
-import { criticField } from './critic-render';
+import { criticField, flashEffect, flashField, flashRangesFor } from './critic-render';
+import { parseCritic } from './critic';
 
 interface Painted {
   from: number;
@@ -97,6 +98,50 @@ describe('Live Preview decorations — markers hidden, text styled', () => {
   });
 });
 
+describe('Live Preview decorations — native ~~ strikethrough is cancelled', () => {
+  // {~~alt~>neu~~} contains a ~~ pair, which Obsidian's own Markdown parser
+  // reads as ordinary strikethrough — striking arrow and replacement too.
+  // The construct-wide mark is the hook styles.css uses to cancel that line.
+  const doc = 'Das {~~kalte~>fahle~~} Licht.';
+
+  it('marks the whole substitution, markers included', () => {
+    expect(paint(doc)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-substitution', text: '{~~kalte~>fahle~~}' })
+    );
+  });
+
+  it('keeps the construct mark while the cursor reveals the markup', () => {
+    expect(paint(doc, 6)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-substitution', text: '{~~kalte~>fahle~~}' })
+    );
+  });
+
+  it('does not mark other kinds, whose bodies Markdown leaves alone', () => {
+    expect(paint('Sie {--ging--}.').map((d) => d.cls)).not.toContain('sn-critic-substitution');
+  });
+});
+
+describe('Live Preview decorations — revealed markup stands apart from prose', () => {
+  const doc = 'Sie {++leise ++}ging.';
+
+  it('washes the whole construct while the cursor is inside', () => {
+    expect(paint(doc, 8)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{++leise ++}' })
+    );
+  });
+
+  it('adds no wash while the markup is folded away', () => {
+    expect(paint(doc, 0).map((d) => d.cls)).not.toContain('sn-critic-revealed');
+  });
+
+  it('washes a revealed comment, braces and body alike', () => {
+    const commented = 'Sie ging.{>>warum?<<}';
+    expect(paint(commented, 12)).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{>>warum?<<}' })
+    );
+  });
+});
+
 describe('Live Preview decorations — cursor reveals the raw markup', () => {
   const doc = 'Sie {++leise ++}ging.';
 
@@ -142,6 +187,86 @@ describe('Live Preview decorations — what stays untouched', () => {
 
   it('leaves an unterminated marker alone', () => {
     expect(paint('Sie {++ ging fort.')).toEqual([]);
+  });
+});
+
+describe('Live Preview decorations — flash after a card click', () => {
+  const doc = 'Sie {--ging--} fort.';
+
+  const flashed = (state: EditorState) => {
+    const out: Painted[] = [];
+    state.field(flashField).between(0, state.doc.length, (from, to, value) => {
+      out.push({
+        from,
+        to,
+        cls: (value.spec.class as string) ?? '',
+        text: state.doc.sliceString(from, to),
+      });
+    });
+    return out;
+  };
+
+  const base = () => EditorState.create({ doc, extensions: [flashField] });
+
+  it('starts with nothing flashed', () => {
+    expect(flashed(base())).toEqual([]);
+  });
+
+  it('paints the flashed ranges', () => {
+    const state = base().update({
+      effects: flashEffect.of({ ranges: [{ from: 4, to: 14 }], key: 1 }),
+    }).state;
+    expect(flashed(state)).toEqual([
+      expect.objectContaining({ cls: 'sn-critic-flash', text: '{--ging--}' }),
+    ]);
+  });
+
+  it('replaces one flash with the next instead of stacking them', () => {
+    const state = base()
+      .update({ effects: flashEffect.of({ ranges: [{ from: 4, to: 14 }], key: 1 }) })
+      .state.update({ effects: flashEffect.of({ ranges: [{ from: 15, to: 20 }], key: 2 }) }).state;
+    expect(flashed(state)).toEqual([
+      expect.objectContaining({ cls: 'sn-critic-flash', text: 'fort.' }),
+    ]);
+  });
+
+  it('follows text inserted above it', () => {
+    const state = base()
+      .update({ effects: flashEffect.of({ ranges: [{ from: 4, to: 14 }], key: 1 }) })
+      .state.update({ changes: { from: 0, insert: 'Neu. ' } }).state;
+    expect(flashed(state)).toEqual([
+      expect.objectContaining({ cls: 'sn-critic-flash', text: '{--ging--}' }),
+    ]);
+  });
+});
+
+describe('flashRangesFor — the flash matches the visible text, not the box', () => {
+  const entryOf = (doc: string) => parseCritic(doc)[0]!;
+
+  it('flashes a substitution as one band from quote to replacement', () => {
+    // One range, not two: the arrow between them is hidden (zero-width), and
+    // two adjacent rounded boxes would meet in a visible notch.
+    const doc = 'Das {~~kalte~>fahle~~} Licht.';
+    const slices = flashRangesFor(entryOf(doc), doc.length).map((r) => doc.slice(r.from, r.to));
+    expect(slices).toEqual(['kalte~>fahle']);
+  });
+
+  it('flashes the quote of a commented construct, not its comment glyph', () => {
+    const doc = 'Sie {--ging--}{>>zu spät?<<} fort.';
+    const slices = flashRangesFor(entryOf(doc), doc.length).map((r) => doc.slice(r.from, r.to));
+    expect(slices).toEqual(['ging']);
+  });
+
+  it('falls back to the whole construct for a bare comment', () => {
+    const doc = 'Sie ging.{>>warum?<<}';
+    const slices = flashRangesFor(entryOf(doc), doc.length).map((r) => doc.slice(r.from, r.to));
+    expect(slices).toEqual(['{>>warum?<<}']);
+  });
+
+  it('clamps ranges that have gone stale past the end of the doc', () => {
+    const doc = 'Sie {--ging--}.';
+    expect(flashRangesFor(entryOf(doc), 9)).toEqual([{ from: 7, to: 9 }]);
+    expect(flashRangesFor(entryOf(doc), 6)).toEqual([]);
   });
 });
 

@@ -10,7 +10,7 @@
 // its normal colour throughout; coloured prose is hard to read, and the
 // decoration already carries the meaning.
 
-import { StateField, type EditorState, type Extension } from '@codemirror/state';
+import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { setIcon } from 'obsidian';
 import { parseCritic, type Entry, type Range } from './critic';
@@ -99,6 +99,30 @@ function decorate(entries: Entry[], state: EditorState): DecorationSet {
       });
     };
 
+    // {~~alt~>neu~~} contains a ~~ pair, which Obsidian's own Markdown parser
+    // reads as ordinary strikethrough — a second line across arrow and
+    // replacement too. This mark is the hook styles.css uses to cancel that
+    // line; the deletion span then re-applies its own. No aria-label: the
+    // quote and replacement marks inside already carry the full sentence.
+    if (entry.kind === 'substitution') {
+      ranges.push({
+        from: entry.from,
+        to: entry.to,
+        value: Decoration.mark({ class: 'sn-critic-substitution' }),
+      });
+    }
+
+    // With its markers revealed, the construct is markup in prose colour on a
+    // prose line. A wash over the whole span — braces, comment body and all —
+    // says where the markup ends and the sentence resumes.
+    if (revealed) {
+      ranges.push({
+        from: entry.from,
+        to: entry.to,
+        value: Decoration.mark({ class: 'sn-critic-revealed' }),
+      });
+    }
+
     mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
     mark(entry.spans.replacement, 'sn-critic-insertion');
 
@@ -149,17 +173,98 @@ export const criticField = StateField.define<CriticValue>({
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
 });
 
+// ─── Card-click flash ───
+
 /**
- * @param onReveal Called with an entry's start offset when the reader clicks
+ * Exported for tests; dispatch through flashEntry. The key tells consecutive
+ * flashes of the same ranges apart, so CodeMirror rebuilds the spans — and
+ * with them restarts the CSS animation — instead of diffing the change away.
+ */
+export const flashEffect = StateEffect.define<{ ranges: Range[]; key: number }>({
+  map: (value, mapping) => ({
+    ...value,
+    ranges: value.ranges.map((r) => ({
+      from: mapping.mapPos(r.from),
+      to: mapping.mapPos(r.to),
+    })),
+  }),
+});
+
+export const flashField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (e.is(flashEffect)) {
+        const mark = Decoration.mark({
+          class: 'sn-critic-flash',
+          attributes: { 'data-sn-flash': String(e.value.key) },
+        });
+        return Decoration.set(e.value.ranges.map((r) => mark.range(r.from, r.to)));
+      }
+    }
+    return deco.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/**
+ * What a card click washes: the entry's text — quote and replacement, the
+ * same boxes the resting decorations paint — rather than the whole
+ * construct, whose comment glyph is shorter than a text fragment and gives
+ * the wash a stepped outline. Only a bare comment, having no text of its
+ * own, flashes its full range.
+ *
+ * Clamped rather than trusted: the caller's offsets can be a refresh older
+ * than the text, and a stale range past the end would throw.
+ */
+export function flashRangesFor(entry: Entry, len: number): Range[] {
+  const texts = [entry.spans.quote, entry.spans.replacement].filter(nonEmpty);
+  // A substitution flashes as one band from quote to replacement: the arrow
+  // between them is hidden, and two adjacent rounded boxes would meet in a
+  // visible notch.
+  const spans =
+    texts.length > 0
+      ? [{ from: texts[0].from, to: texts[texts.length - 1].to }]
+      : [{ from: entry.from, to: entry.to }];
+  return spans
+    .map((r) => ({ from: Math.min(r.from, len), to: Math.min(r.to, len) }))
+    .filter((r) => r.from < r.to);
+}
+
+let flashKey = 0;
+
+/**
+ * Briefly washes an entry's text so the eye lands where the drawer just
+ * scrolled the editor. The animation ends transparent and the decorations
+ * then sit inert until the next flash replaces them — cheaper than a removal
+ * timer, and immune to the races one invites when clicks come quickly.
+ */
+export function flashEntry(view: EditorView, entry: Entry): void {
+  const ranges = flashRangesFor(entry, view.state.doc.length);
+  if (ranges.length === 0) return;
+  view.dispatch({ effects: flashEffect.of({ ranges, key: flashKey++ }) });
+}
+
+/**
+ * @param onReveal Called with an entry's start offset when the reader presses
  *   anywhere inside it — decorated text or comment glyph alike. Handling this
  *   at the view level rather than on the widget covers both with one listener
- *   and keeps the click from being swallowed: the caret still moves.
+ *   and keeps the press from being swallowed: the caret still moves.
  */
 export function criticEditorExtension(onReveal: (offset: number) => void): Extension {
   return [
     criticField,
+    flashField,
     EditorView.domEventHandlers({
-      click(event, view) {
+      mousedown(event, view) {
+        // Deliberately mousedown, not click. Revealing the construct rebuilds
+        // the line's DOM under the pressed button, and the browser swallows
+        // the click entirely when the pressed element does not survive to
+        // mouseup — so a click handler misses exactly the first press on a
+        // folded construct. This runs before CodeMirror's own handler moves
+        // the caret, so the layout — and these coordinates — are still the
+        // folded ones the reader aimed at.
+        if (event.button !== 0) return false;
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         if (pos === null) return false;
         const hit = view.state

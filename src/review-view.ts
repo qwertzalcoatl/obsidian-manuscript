@@ -24,6 +24,8 @@ import {
   type Entry,
   type Mode,
 } from './critic';
+import type { EditorView as CmEditorView } from '@codemirror/view';
+import { flashEntry } from './critic-render';
 
 export const VIEW_TYPE_REVIEW = 'sheet-navigator-review';
 
@@ -68,6 +70,12 @@ export class ReviewView extends ItemView {
   private cards: Card[] = [];
   private file: TFile | null = null;
   private refreshTimer: number | null = null;
+  /**
+   * Where the last focused entry sits, so a repaint can re-mark its card.
+   * Every refresh rebuilds the list from scratch — without this, the focus a
+   * click just applied would vanish on the next repaint, however triggered.
+   */
+  private focusedOffset: number | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -93,8 +101,15 @@ export class ReviewView extends ItemView {
     this.listEl = this.containerEl.createDiv({ cls: 'sheet-review-list' });
 
     this.registerEvent(this.app.workspace.on('file-open', () => this.requestRefresh()));
+    // Only a genuine file switch is worth a repaint here. Clicking from
+    // another pane into the editor also lands in this event, with the same
+    // file still active — and the repaint it scheduled would destroy the very
+    // card focusAt() had just focused for that click, 200ms later. Content
+    // changes arrive through editor-change and modify, never through this.
     this.registerEvent(
-      this.app.workspace.on('active-leaf-change', () => this.requestRefresh())
+      this.app.workspace.on('active-leaf-change', () => {
+        if (this.app.workspace.getActiveFile()?.path !== this.file?.path) this.requestRefresh();
+      })
     );
     // Typing in the note, and Claude writing to it from outside, both land here.
     this.registerEvent(this.app.workspace.on('editor-change', () => this.requestRefresh()));
@@ -151,7 +166,10 @@ export class ReviewView extends ItemView {
   refresh(): void {
     this.cancelRefresh();
     const file = this.app.workspace.getActiveFile();
-    this.file = file && file.extension === 'md' ? file : null;
+    const next = file && file.extension === 'md' ? file : null;
+    // Offsets from one note mean nothing in another.
+    if (next?.path !== this.file?.path) this.focusedOffset = null;
+    this.file = next;
 
     if (!this.file) {
       this.cards = [];
@@ -200,6 +218,17 @@ export class ReviewView extends ItemView {
     const fragment = document.createDocumentFragment();
     for (const card of this.cards) fragment.appendChild(this.buildCard(card));
     this.listEl.appendChild(fragment);
+
+    // Fresh elements know nothing of the focus their predecessors carried.
+    // Re-marked without scrolling: a repaint mid-typing that also yanked the
+    // list to the focused card would fight the reader's own scrolling.
+    if (this.focusedOffset !== null) {
+      const offset = this.focusedOffset;
+      const index = this.cards.findIndex(
+        (c) => offset >= c.entry.from && offset < c.entry.to
+      );
+      this.listEl.children[index]?.addClass('is-focused');
+    }
   }
 
   private paintHeader(): void {
@@ -431,11 +460,18 @@ export class ReviewView extends ItemView {
     const to = editor.offsetToPos(card.entry.to);
     editor.scrollIntoView({ from, to }, true);
 
+    // `cm` is Obsidian's undocumented-but-established handle on the CodeMirror
+    // view; without it there is no way to dispatch the flash, so it degrades
+    // to scroll-without-flash if a future Obsidian drops the property.
+    const cm = (editor as unknown as { cm?: CmEditorView }).cm;
+    if (cm) flashEntry(cm, card.entry);
+
     this.listEl
       .querySelectorAll('.sheet-review-card.is-focused')
       .forEach((el) => el.removeClass('is-focused'));
     const index = this.cards.indexOf(card);
     this.listEl.children[index]?.addClass('is-focused');
+    this.focusedOffset = card.entry.from;
   }
 
   /** Scrolls the drawer to the card covering `offset` and focuses it. */
@@ -450,6 +486,7 @@ export class ReviewView extends ItemView {
 
     this.listEl.querySelectorAll('.sheet-review-card.is-focused').forEach((c) => c.removeClass('is-focused'));
     el.addClass('is-focused');
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    this.focusedOffset = offset;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 }

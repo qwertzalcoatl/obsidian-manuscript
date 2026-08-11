@@ -393,12 +393,72 @@
   text-decoration: line-through;
   text-decoration-color: var(--color-red, #e05252);
   text-decoration-thickness: 1px;
-  opacity: 0.6;
+  /* Faded via text colour, not opacity: an opacity group would also dim
+     whatever paints inside it — the card-click flash renders its wash within
+     this span and came out two-tone, weaker over the deletion half. */
+  color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
 .sn-critic-highlight {
   background-color: color-mix(in srgb, var(--text-accent) 14%, transparent);
   border-radius: 2px;
+}
+
+/* {~~alt~>neu~~} contains a ~~ pair, which Obsidian's own Markdown parser
+   reads as ordinary strikethrough — a second, prose-coloured line across
+   arrow and replacement too. CodeMirror nests the editor's mark and ours in
+   either order, so both directions are cancelled here. The deletion span is
+   unaffected: it draws its own line on its own element. */
+.sn-critic-substitution .cm-strikethrough,
+.cm-strikethrough:has(.sn-critic-substitution) {
+  text-decoration: none;
+}
+
+/* With the cursor inside, the raw markup comes back as prose-coloured text on
+   the prose line. A faint wash over the whole construct — braces, comment
+   body and all — says where markup ends and the sentence resumes. Weaker
+   than .sn-critic-highlight, so a real highlight stays the stronger object. */
+.sn-critic-revealed {
+  background-color: color-mix(in srgb, var(--text-accent) 7%, transparent);
+  border-radius: 2px;
+}
+
+/* In the editor a click on decorated text focuses the construct's card in the
+   drawer, so the folded form advertises that the way the glyph does. Scoped
+   to .cm-content because Reading view reuses these classes without offering
+   a click. */
+.cm-content .sn-critic-insertion,
+.cm-content .sn-critic-deletion,
+.cm-content .sn-critic-highlight {
+  cursor: pointer;
+}
+
+/* Revealed markup is text being edited by hand, so the I-beam wins there.
+   Two selectors because CodeMirror may nest the construct-wide span outside
+   or inside the quote spans; the second out-specifies the pointer rule. */
+.cm-content .sn-critic-revealed,
+.cm-content .sn-critic-revealed :is(.sn-critic-insertion, .sn-critic-deletion, .sn-critic-highlight) {
+  cursor: text;
+}
+
+/* Clicking a card scrolls the editor to its entry; this wash is what tells
+   the eye where to land once it gets there. It is the text highlight itself
+   lit up — the same strip and radius as .sn-critic-highlight, animated from
+   a strong accent down to nothing — so the flash and the resting decoration
+   are one object, not two boxes of different heights. The span then sits
+   inert until the next flash replaces it. */
+@keyframes sn-critic-flash {
+  from {
+    background-color: color-mix(in srgb, var(--text-accent) 45%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.sn-critic-flash {
+  border-radius: 2px;
+  animation: sn-critic-flash 900ms ease-out;
 }
 
 /* Stands in for a whole {>>…<<} construct. Sized against the surrounding text
