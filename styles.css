@@ -453,32 +453,6 @@
   animation: sn-critic-flash 900ms ease-out;
 }
 
-/* Stands in for a whole {>>…<<} construct. Sized against the surrounding text
-   rather than a fixed px so it keeps its proportion in any editor font size. */
-.sn-critic-glyph {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: baseline;
-  color: var(--text-accent);
-  opacity: 0.55;
-  transition: opacity 0.15s ease;
-}
-
-/* Live Preview only: there a click maps to a document offset and can focus the
-   card. In Reading view the glyph is an indicator, so it does not offer. */
-.sn-critic-glyph.is-interactive {
-  cursor: pointer;
-}
-
-.sn-critic-glyph.is-interactive:hover {
-  opacity: 1;
-}
-
-.sn-critic-glyph svg {
-  width: 0.85em;
-  height: 0.85em;
-}
-
 /* ─── Review drawer ───
    Deliberately the same object as the navigator: identical padding rhythm,
    hairline rules instead of card chrome, and the accent bar reused as the
@@ -708,8 +682,7 @@
 @media (prefers-reduced-motion: reduce) {
   .sheet-review-card,
   .sheet-review-card.is-resolving,
-  .sheet-review-actions,
-  .sn-critic-glyph {
+  .sheet-review-actions {
     transition: none;
   }
 }

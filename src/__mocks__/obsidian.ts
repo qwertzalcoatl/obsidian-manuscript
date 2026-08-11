@@ -1,7 +1,6 @@
-// Minimal stub so ts-jest can resolve `obsidian` in tests. Most tested modules
-// are obsidian-free; critic-render.ts needs setIcon, which Obsidian implements
-// by injecting a Lucide <svg>. A marker element is enough — the tests assert
-// where the glyph lands, not what it draws.
+// Minimal stub so ts-jest can resolve `obsidian` in tests. The tested modules
+// are obsidian-free; this exists for the ones that import it transitively.
+// setIcon is Obsidian's Lucide <svg> injector — a marker element is enough.
 export class Modal {}
 export class Setting {}
 export class Notice {}

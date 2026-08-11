@@ -50,21 +50,17 @@ describe('renderCriticMarkup — markers disappear, text survives', () => {
     expect(root.querySelector('.sn-critic-highlight')?.textContent).toBe('ging');
   });
 
-  it('replaces a standalone comment with a glyph', () => {
+  it('removes a standalone comment entirely', () => {
     const root = render('<p>Er zögerte. {>>Mehr Spannung<<}</p>');
     expect(root.textContent).toBe('Er zögerte. ');
-    const glyph = root.querySelector('.sn-critic-glyph');
-    expect(glyph).not.toBeNull();
-    expect(glyph?.getAttribute('aria-label')).toBe('Comment: Mehr Spannung');
+    expect(root.querySelector('.sn-critic-glyph')).toBeNull();
   });
 
-  it('keeps the anchor and shows a glyph for an attached comment', () => {
+  it('keeps the anchor and removes an attached comment', () => {
     const root = render('<p>Sie {==ging==}{>>zu abrupt?<<} fort.</p>');
     expect(root.textContent).toBe('Sie ging fort.');
     expect(root.querySelector('.sn-critic-highlight')?.textContent).toBe('ging');
-    expect(root.querySelector('.sn-critic-glyph')?.getAttribute('aria-label')).toBe(
-      'Highlighted: ging. Comment: zu abrupt?'
-    );
+    expect(root.querySelector('.sn-critic-glyph')).toBeNull();
   });
 });
 

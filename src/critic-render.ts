@@ -20,14 +20,7 @@ import {
   type EditorState,
   type Extension,
 } from '@codemirror/state';
-import {
-  Decoration,
-  EditorView,
-  WidgetType,
-  keymap,
-  type DecorationSet,
-} from '@codemirror/view';
-import { setIcon } from 'obsidian';
+import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
 import { parseCritic, type Entry, type Range } from './critic';
 
 /** Cheap reject for the overwhelming majority of notes, which carry no markup. */
@@ -68,30 +61,6 @@ function labelFor(entry: Entry): string {
 const nonEmpty = (r: Range | null): r is Range => r !== null && r.to > r.from;
 
 // ─── Live Preview ───
-
-class CommentGlyph extends WidgetType {
-  constructor(private readonly label: string) {
-    super();
-  }
-
-  eq(other: CommentGlyph): boolean {
-    return other.label === this.label;
-  }
-
-  toDOM(): HTMLElement {
-    const el = document.createElement('span');
-    // Only clickable in Live Preview, where a click maps to a document offset
-    // and can focus the matching card. Reading view's glyph is an indicator.
-    el.className = 'sn-critic-glyph is-interactive';
-    el.setAttribute('aria-label', this.label);
-    setIcon(el, 'message-square');
-    return el;
-  }
-
-  ignoreEvent(): boolean {
-    return false;
-  }
-}
 
 const HIDDEN = Decoration.replace({});
 
@@ -209,7 +178,7 @@ export function criticDecorations(state: EditorState): DecorationSet {
       ranges.push({
         from: entry.spans.comment.from,
         to: entry.spans.comment.to,
-        value: Decoration.replace({ widget: new CommentGlyph(labelFor(entry)) }),
+        value: HIDDEN,
       });
     }
   }
@@ -449,7 +418,7 @@ function textNodesByBlock(root: HTMLElement): Map<HTMLElement, Text[]> {
       const parent = node.parentElement;
       if (!parent) return NodeFilter.FILTER_REJECT;
       // Code is not prose; markup inside it is a literal example.
-      if (parent.closest('code, pre, .sn-critic-glyph')) return NodeFilter.FILTER_REJECT;
+      if (parent.closest('code, pre')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
@@ -496,8 +465,7 @@ function slices(spans: NodeSpan[], from: number, to: number) {
 
 type Op =
   | { from: number; to: number; op: 'hide' }
-  | { from: number; to: number; op: 'wrap'; cls: string; label: string }
-  | { from: number; to: number; op: 'glyph'; label: string };
+  | { from: number; to: number; op: 'wrap'; cls: string; label: string };
 
 function applyOps(spans: NodeSpan[], ops: Op[]): void {
   // Right to left, so splitting a node never moves the ranges still to come.
@@ -508,15 +476,6 @@ function applyOps(spans: NodeSpan[], ops: Op[]): void {
 
       if (op.op === 'hide') {
         piece.remove();
-        continue;
-      }
-
-      if (op.op === 'glyph') {
-        const glyph = document.createElement('span');
-        glyph.className = 'sn-critic-glyph';
-        glyph.setAttribute('aria-label', op.label);
-        setIcon(glyph, 'message-square');
-        piece.replaceWith(glyph);
         continue;
       }
 
@@ -535,6 +494,9 @@ function applyOps(spans: NodeSpan[], ops: Op[]): void {
  * ==text== into a <mark> element by the time a post-processor runs, so the
  * native forms leave nothing here to find. A native comment staying invisible
  * in Reading view is exactly how Obsidian behaves without this plugin.
+ *
+ * Comments render as nothing at all, anchored or not: they live in the Review
+ * drawer, and an editorial note has no business interrupting a reader.
  */
 export function renderCriticMarkup(root: HTMLElement): void {
   for (const [, nodes] of textNodesByBlock(root)) {
@@ -560,7 +522,7 @@ export function renderCriticMarkup(root: HTMLElement): void {
         ops.push({ ...entry.spans.replacement, op: 'wrap', cls: 'sn-critic-insertion', label });
       }
       if (nonEmpty(entry.spans.comment)) {
-        ops.push({ ...entry.spans.comment, op: 'glyph', label });
+        ops.push({ ...entry.spans.comment, op: 'hide' });
       }
     }
 
