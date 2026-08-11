@@ -19,6 +19,7 @@ import {
   flashField,
   flashRangesFor,
   hiddenRanges,
+  lineCollapseRange,
   unfoldEffect,
   unfoldField,
 } from './critic-render';
@@ -476,5 +477,58 @@ describe('constructToSelectOnDelete — a keystroke that would break markup', ()
       extensions: [unfoldField, criticField],
     });
     expect(constructToSelectOnDelete(built, 7, false)).toEqual({ from: 4, to: 28 });
+  });
+});
+
+describe('lineCollapseRange — a comment that owned its line takes it along', () => {
+  const collapse = (doc: string) => {
+    const state = EditorState.create({ doc, extensions: [unfoldField, criticField] });
+    const entry = state.field(criticField)[0];
+    const range = lineCollapseRange(state, entry);
+    return range === null ? null : doc.slice(range.from, range.to);
+  };
+
+  it('takes the preceding newline with a comment alone on its line', () => {
+    expect(collapse('Sie ging.\n{>>Mehr Luft<<}\nDann Stille.')).toBe('\n{>>Mehr Luft<<}');
+  });
+
+  it('tolerates leading and trailing whitespace on that line', () => {
+    expect(collapse('Sie ging.\n  {>>Mehr Luft<<}  \nDann Stille.')).toBe(
+      '\n  {>>Mehr Luft<<}  '
+    );
+  });
+
+  it('leaves a comment sharing its line with prose', () => {
+    expect(collapse('Sie ging.{>>Mehr Luft<<}')).toBeNull();
+  });
+
+  it('leaves an attached comment, whose anchor is on the line', () => {
+    expect(collapse('Sie {==ging==}{>>Mehr Luft<<}')).toBeNull();
+  });
+
+  it('takes the following newline when the comment opens the note', () => {
+    expect(collapse('{>>Mehr Luft<<}\nSie ging.')).toBe('{>>Mehr Luft<<}\n');
+  });
+
+  it('leaves a comment that is the only line in the note', () => {
+    expect(collapse('{>>Mehr Luft<<}')).toBeNull();
+  });
+});
+
+describe('Live Preview decorations — an unanchored comment on its own line', () => {
+  const doc = 'Sie ging.\n{>>Mehr Luft<<}\nDann Stille.';
+
+  it('replaces the line rather than just the construct', () => {
+    expect(paint(doc)).toContainEqual(
+      expect.objectContaining({ cls: '', text: '\n{>>Mehr Luft<<}' })
+    );
+  });
+
+  it('leaves the prose above and below untouched', () => {
+    expect(visible(doc)).toBe('Sie ging.\nDann Stille.');
+  });
+
+  it('replaces only the construct when prose shares the line', () => {
+    expect(visible('Sie ging.{>>Mehr Luft<<}')).toBe('Sie ging.');
   });
 });

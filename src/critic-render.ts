@@ -175,11 +175,16 @@ export function criticDecorations(state: EditorState): DecorationSet {
       if (nonEmpty(marker)) ranges.push({ from: marker.from, to: marker.to, value: HIDDEN });
     }
     if (nonEmpty(entry.spans.comment)) {
-      ranges.push({
-        from: entry.spans.comment.from,
-        to: entry.spans.comment.to,
-        value: HIDDEN,
-      });
+      const line = lineCollapseRange(state, entry);
+      if (line !== null) {
+        ranges.push({ from: line.from, to: line.to, value: Decoration.replace({ block: true }) });
+      } else {
+        ranges.push({
+          from: entry.spans.comment.from,
+          to: entry.spans.comment.to,
+          value: HIDDEN,
+        });
+      }
     }
   }
 
@@ -218,10 +223,36 @@ export function hiddenRanges(state: EditorState): Range[] {
   for (const entry of state.field(criticField)) {
     if (isRevealed(unfold, entry)) continue;
     for (const marker of entry.spans.markers) if (nonEmpty(marker)) out.push(marker);
-    if (nonEmpty(entry.spans.comment)) out.push(entry.spans.comment);
+    if (nonEmpty(entry.spans.comment)) {
+      out.push(lineCollapseRange(state, entry) ?? entry.spans.comment);
+    }
   }
 
   return out;
+}
+
+/**
+ * The line an unanchored comment should take with it, or null.
+ *
+ * Hiding only the construct would leave a blank line mid-paragraph — more
+ * conspicuous than the glyph this replaced. The same rule applyEdits already
+ * applies in critic.ts when such a comment is resolved: an edit that empties
+ * the line it sits on takes the line with it.
+ *
+ * Takes the newline before the line where there is one, so the paragraphs
+ * above and below close up rather than trading one gap for another. A comment
+ * that is the only line in the note keeps its line: there is nothing to close.
+ */
+export function lineCollapseRange(state: EditorState, entry: Entry): Range | null {
+  if (entry.kind !== 'comment') return null;
+
+  const line = state.doc.lineAt(entry.from);
+  if (line.text.slice(0, entry.from - line.from).trim() !== '') return null;
+  if (line.text.slice(entry.to - line.from).trim() !== '') return null;
+
+  if (line.from > 0) return { from: line.from - 1, to: line.to };
+  if (line.to < state.doc.length) return { from: line.from, to: line.to + 1 };
+  return null;
 }
 
 /**
