@@ -11,15 +11,22 @@
 // decoration already carries the meaning.
 
 import {
+  EditorSelection,
   MapMode,
+  Prec,
   RangeSet,
   StateEffect,
   StateField,
-  type EditorSelection,
   type EditorState,
   type Extension,
 } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
+import {
+  Decoration,
+  EditorView,
+  WidgetType,
+  keymap,
+  type DecorationSet,
+} from '@codemirror/view';
 import { setIcon } from 'obsidian';
 import { parseCritic, type Entry, type Range } from './critic';
 
@@ -248,6 +255,33 @@ export function hiddenRanges(state: EditorState): Range[] {
   return out;
 }
 
+/**
+ * The construct a Backspace or Delete would silently break, if any.
+ *
+ * The keystroke takes one character — [pos-1, pos) backwards, [pos, pos+1)
+ * forwards. When that character is part of a hidden marker, removing it turns
+ * the construct into plain text with nothing on screen to say so, because the
+ * marker was never visible in the first place. The caller selects the whole
+ * entry instead, and a second press removes it as one undoable unit.
+ *
+ * Returns null for a construct showing its raw source: there the syntax is
+ * visible, and editing it by hand is the point.
+ */
+export function constructToSelectOnDelete(
+  state: EditorState,
+  pos: number,
+  forward: boolean
+): Range | null {
+  const from = forward ? pos : pos - 1;
+  const to = from + 1;
+
+  const breaks = hiddenRanges(state).some((r) => from < r.to && to > r.from);
+  if (!breaks) return null;
+
+  const entry = state.field(criticField).find((e) => from < e.to && to > e.from);
+  return entry ? { from: entry.from, to: entry.to } : null;
+}
+
 // ─── Card-click flash ───
 
 /**
@@ -321,6 +355,23 @@ export function flashEntry(view: EditorView, entry: Entry): void {
 }
 
 /**
+ * Turns a keystroke that would break a construct into a selection of it.
+ *
+ * Returns false — letting Obsidian's own Backspace run, list outdent and all
+ * — whenever the keystroke is harmless, which is almost always.
+ */
+function selectRatherThanBreak(view: EditorView, forward: boolean): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+
+  const hit = constructToSelectOnDelete(view.state, sel.head, forward);
+  if (hit === null) return false;
+
+  view.dispatch({ selection: EditorSelection.range(hit.from, hit.to) });
+  return true;
+}
+
+/**
  * @param onReveal Called with an entry's start offset when the reader clicks
  *   anywhere inside it. Handling this at the view level rather than per span
  *   covers every construct with one listener, and returning false keeps the
@@ -345,6 +396,16 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
         hiddenRanges(view.state).map((r) => HIDDEN.range(r.from, r.to)),
         true
       )
+    ),
+    // Ahead of Obsidian's own bindings: by the time the default Backspace
+    // runs, the marker is already gone. atomicRanges does not cover this —
+    // it would extend the deletion over the whole marker run instead, which
+    // breaks the construct just as thoroughly.
+    Prec.high(
+      keymap.of([
+        { key: 'Backspace', run: (view) => selectRatherThanBreak(view, false) },
+        { key: 'Delete', run: (view) => selectRatherThanBreak(view, true) },
+      ])
     ),
     flashField,
     EditorView.domEventHandlers({

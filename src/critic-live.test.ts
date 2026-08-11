@@ -12,6 +12,7 @@
 
 import { EditorState } from '@codemirror/state';
 import {
+  constructToSelectOnDelete,
   criticDecorations,
   criticField,
   flashEffect,
@@ -421,5 +422,59 @@ describe('hiddenRanges — what the caret may not enter', () => {
 
   it('finds nothing in a note without markup', () => {
     expect(rangesFor('Sie ging fort.')).toEqual([]);
+  });
+});
+
+describe('constructToSelectOnDelete — a keystroke that would break markup', () => {
+  // {--ging--}: markers [4,7) and [11,14), body [7,11).
+  const doc = 'Sie {--ging--} fort.';
+  const state = () => EditorState.create({ doc, extensions: [unfoldField, criticField] });
+  const at = (pos: number, forward: boolean) =>
+    constructToSelectOnDelete(state(), pos, forward);
+
+  it('selects the construct when backspace would eat the opening marker', () => {
+    expect(at(7, false)).toEqual({ from: 4, to: 14 });
+  });
+
+  it('selects the construct when delete would eat the closing marker', () => {
+    expect(at(11, true)).toEqual({ from: 4, to: 14 });
+  });
+
+  it('selects the construct when backspace lands just past the closing brace', () => {
+    expect(at(14, false)).toEqual({ from: 4, to: 14 });
+  });
+
+  it('leaves backspace alone just before the opening brace', () => {
+    expect(at(4, false)).toBeNull();
+  });
+
+  it('leaves backspace alone inside the quoted text', () => {
+    expect(at(9, false)).toBeNull();
+  });
+
+  it('leaves delete alone inside the quoted text', () => {
+    expect(at(9, true)).toBeNull();
+  });
+
+  it('leaves ordinary prose alone', () => {
+    expect(at(2, false)).toBeNull();
+    expect(at(18, true)).toBeNull();
+  });
+
+  it('leaves a construct showing its raw source alone', () => {
+    const revealed = state().update({
+      selection: { anchor: 7 },
+      effects: unfoldEffect.of({ from: 4, to: 14 }),
+    }).state;
+    expect(constructToSelectOnDelete(revealed, 7, false)).toBeNull();
+  });
+
+  it('selects the whole entry, attached comment included', () => {
+    const commented = 'Sie {--ging--}{>>zu spät?<<} fort.';
+    const built = EditorState.create({
+      doc: commented,
+      extensions: [unfoldField, criticField],
+    });
+    expect(constructToSelectOnDelete(built, 7, false)).toEqual({ from: 4, to: 28 });
   });
 });
