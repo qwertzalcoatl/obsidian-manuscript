@@ -229,6 +229,45 @@ function simple(
 /** A blank line ends a paragraph, and no construct may cross one. */
 const BLANK_LINE = /\n[ \t]*\n/;
 
+/**
+ * A note's text, made safe to put inside its own markers.
+ *
+ * The format has no escape syntax, so what a body cannot hold is defused
+ * rather than escaped. A blank line makes BLANK_LINE above refuse the whole
+ * construct and the note stops rendering — the loudest possible failure for
+ * the quietest possible keystroke. The closing marker ends the construct
+ * early, truncating the note and spilling the rest into the manuscript.
+ *
+ * A space goes into the sequence rather than the sequence being dropped: the
+ * realistic collision is a German writer setting guillemets as >>Wort<< with a
+ * brace immediately after, and `<< }` leaves that legible while costing the
+ * parser its terminator. Nothing is lost silently either — the card is redrawn
+ * from the document, so what was stored is what shows.
+ *
+ * The two terminators need different treatment, which is why this is a table
+ * of two cases and not one clever expression over `close`.
+ */
+export function sanitizeComment(text: string, close: '<<}' | '%%' = '<<}'): string {
+  const flat = text
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n[ \t]*(?:\n[ \t]*)+/g, '\n')
+    .trim();
+
+  // A doubled character is a harder container than a three-character one: the
+  // body must hold no `%%`, and must not end in a `%` either, or the closing
+  // marker borrows it and the note loses its last character silently. The
+  // space that prevents that never shows — parseCritic trims what it reports.
+  if (close === '%%') return flat.replace(/%(?=%|$)/g, '% ');
+
+  // `<<}` needs only the sequence itself broken. A body ending in `<` or `<<`
+  // is safe: the marker is three characters, so an adjacent one cannot
+  // complete it without the brace, and the non-greedy scan stops at the first
+  // real one. The opening `{>>` needs nothing at all — inside a body it is
+  // ordinary text. split/join rather than a regex, because escaping `<<}` is
+  // a place to make a mistake that fails silently instead of at compile time.
+  return flat.split('<<}').join('<< }');
+}
+
 function scanCritic(content: string, skip: Range[]): Raw[] {
   const out: Raw[] = [];
   CRITIC_RE.lastIndex = 0;

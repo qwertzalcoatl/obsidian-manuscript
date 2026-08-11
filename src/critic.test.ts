@@ -4,6 +4,7 @@ import {
   minimalEdit,
   renderAccepted,
   renderRejected,
+  sanitizeComment,
   type Entry,
 } from './critic';
 
@@ -537,5 +538,58 @@ describe('parseCritic — where a comment body sits', () => {
 
   it('reports null where there is no comment at all', () => {
     expect(parseCritic('Sie {--ging--} fort.')[0].spans.commentBody).toBeNull();
+  });
+});
+
+describe('sanitizeComment — what a note may contain', () => {
+  it('keeps ordinary prose intact', () => {
+    expect(sanitizeComment('Zu früh im Kapitel.')).toBe('Zu früh im Kapitel.');
+  });
+
+  it('keeps a single newline — notes run to several lines', () => {
+    expect(sanitizeComment('Erstens.\nZweitens.')).toBe('Erstens.\nZweitens.');
+  });
+
+  it('collapses a blank line, which would end the construct', () => {
+    expect(sanitizeComment('Erstens.\n\nZweitens.')).toBe('Erstens.\nZweitens.');
+  });
+
+  it('collapses a run of blank lines carrying spaces and tabs', () => {
+    expect(sanitizeComment('Erstens.\n \n\t\nZweitens.')).toBe('Erstens.\nZweitens.');
+  });
+
+  it('normalises CRLF', () => {
+    expect(sanitizeComment('Erstens.\r\nZweitens.')).toBe('Erstens.\nZweitens.');
+  });
+
+  it('defuses the closing marker', () => {
+    expect(sanitizeComment('siehe >>Wort<<}')).toBe('siehe >>Wort<< }');
+  });
+
+  it('leaves the opening marker alone, which the parser reads as text', () => {
+    expect(sanitizeComment('siehe {>>oben')).toBe('siehe {>>oben');
+  });
+
+  it('defuses %% only for a native note', () => {
+    expect(sanitizeComment('100%% sicher', '%%')).toBe('100% % sicher');
+    expect(sanitizeComment('100%% sicher')).toBe('100%% sicher');
+  });
+
+  it('keeps a native note from ending in a stray %', () => {
+    // %%a%%% hands the closing marker the body's last character, and the note
+    // reads back as "a". The trailing space is invisible: the parser trims.
+    expect(sanitizeComment('a%', '%%')).toBe('a% ');
+  });
+
+  it('leaves <<} alone in a native note, where it terminates nothing', () => {
+    expect(sanitizeComment('siehe >>Wort<<}', '%%')).toBe('siehe >>Wort<<}');
+  });
+
+  it('trims, so a note reads back the way the parser reports it', () => {
+    expect(sanitizeComment('  zu spät?\n')).toBe('zu spät?');
+  });
+
+  it('gives an empty string for whitespace alone', () => {
+    expect(sanitizeComment('  \n\t ')).toBe('');
   });
 });
