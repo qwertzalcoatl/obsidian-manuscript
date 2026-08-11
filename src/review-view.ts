@@ -347,6 +347,21 @@ export class ReviewView extends ItemView {
     }
 
     const actions = el.createDiv({ cls: 'sheet-review-actions' });
+
+    // The way into a note that does not exist yet. Here rather than as a
+    // placeholder line of its own: this row already hides until the card is
+    // hovered or focused, so the affordance costs no height in a list of forty
+    // cards, and :focus-within puts it in the tab order for free. An empty
+    // {>><<} and no comment at all take the same route — the difference is
+    // setComment's, not the card's.
+    if (!entry.comment) {
+      const add = actions.createEl('button', { cls: 'sheet-review-action', text: 'Note' });
+      add.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void this.openNote(entry.from);
+      });
+    }
+
     const isSuggestion =
       entry.kind === 'insertion' || entry.kind === 'deletion' || entry.kind === 'substitution';
 
