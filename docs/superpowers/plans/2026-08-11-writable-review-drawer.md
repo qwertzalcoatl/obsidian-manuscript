@@ -35,7 +35,7 @@
 **Interfaces:**
 - Produces: `Spans.commentBody: Range | null` — the comment's text alone, inside its markers; zero-width when the note is empty; null wherever `spans.comment` is null.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/critic.test.ts`:
 
@@ -76,12 +76,12 @@ describe('parseCritic — where a comment body sits', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest src/critic.test.ts -t "where a comment body sits"`
 Expected: FAIL — `commentBody` does not exist on `Spans`.
 
-- [ ] **Step 3: Add the member**
+- [x] **Step 3: Add the member**
 
 In `src/critic.ts`, replace the `comment` member of `Spans` and add the new one. The existing docstring is stale — the glyph it names was deleted two commits ago:
 
@@ -101,7 +101,7 @@ In `src/critic.ts`, replace the `comment` member of `Spans` and add the new one.
   commentBody: Range | null;
 ```
 
-- [ ] **Step 4: Stop discarding it in both branches**
+- [x] **Step 4: Stop discarding it in both branches**
 
 In the standalone-comment branch of `parseCritic`, the comment above `spans` also names the glyph. Replace both:
 
@@ -129,17 +129,17 @@ In the attached branch, add the member beside `comment`:
       },
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx jest src/critic.test.ts -t "where a comment body sits"`
 Expected: PASS.
 
-- [ ] **Step 6: Run the full suite, build and typecheck**
+- [x] **Step 6: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0. Every existing test passes untouched — this adds a field and changes no behaviour.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/critic.ts src/critic.test.ts
@@ -170,7 +170,7 @@ CriticMarkup has no escape syntax. A note holding its own closing marker truncat
 **Interfaces:**
 - Produces: `sanitizeComment(text: string, close?: string): string` — `close` defaults to `'<<}'` and is `'%%'` for one of Obsidian's own comments.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/critic.test.ts` (add `sanitizeComment` to the import from `./critic`):
 
@@ -229,12 +229,12 @@ describe('sanitizeComment — what a note may contain', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest src/critic.test.ts -t sanitizeComment`
 Expected: FAIL — `sanitizeComment` is not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/critic.ts`, directly below the `BLANK_LINE` constant (line 220):
 
@@ -280,17 +280,17 @@ export function sanitizeComment(text: string, close: '<<}' | '%%' = '<<}'): stri
 
 `split`/`join` rather than a regex: `<<}` would otherwise have to be escaped, and an escaping mistake here is a silent hole rather than a compile error. The trim comes before the `%` pass so that `$` means the real end of the note, and so the space that pass may add survives it.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest src/critic.test.ts -t sanitizeComment`
 Expected: PASS.
 
-- [ ] **Step 5: Run the full suite, build and typecheck**
+- [x] **Step 5: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/critic.ts src/critic.test.ts
@@ -321,7 +321,7 @@ The transform the drawer commits through. Sibling to `applyEntry`: that one reso
 - Consumes: `Spans.commentBody` (Task 1), `sanitizeComment` (Task 2), `applyEntry` (existing)
 - Produces: `setComment(content: string, entry: Entry, text: string): string`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/critic.test.ts` (add `setComment` to the import):
 
@@ -426,12 +426,12 @@ describe('setComment — writing a note into the source', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest src/critic.test.ts -t setComment`
 Expected: FAIL — `setComment` is not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/critic.ts`, directly below `applyEntry`:
 
@@ -479,17 +479,17 @@ export function setComment(content: string, entry: Entry, text: string): string 
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest src/critic.test.ts -t setComment`
 Expected: PASS.
 
-- [ ] **Step 5: Run the full suite, build and typecheck**
+- [x] **Step 5: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/critic.ts src/critic.test.ts
@@ -519,7 +519,7 @@ Notes now run to several lines, which the parser has always permitted and nothin
 **Interfaces:**
 - Produces: no signature change. `lineCollapseRange(state, entry)` spans the line at `entry.from` through the line at `entry.to`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `src/critic-live.test.ts`, append to the existing `describe('lineCollapseRange — …')` block:
 
@@ -539,12 +539,12 @@ In `src/critic-live.test.ts`, append to the existing `describe('lineCollapseRang
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest src/critic-live.test.ts -t lineCollapseRange`
 Expected: FAIL — the first new case returns `'\n{>>Mehr Luft'`, the second returns a range instead of null. The suffix test slices past the end of the first line, gets `''`, and passes.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/critic-render.ts`, replace `lineCollapseRange`'s body and extend its docstring:
 
@@ -581,17 +581,17 @@ export function lineCollapseRange(state: EditorState, entry: Entry): Range | nul
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest src/critic-live.test.ts -t lineCollapseRange`
 Expected: PASS, including all six pre-existing cases — a single-line comment has `first === last`, so nothing about them changes.
 
-- [ ] **Step 5: Run the full suite, build and typecheck**
+- [x] **Step 5: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/critic-render.ts src/critic-live.test.ts
@@ -624,7 +624,7 @@ The drawer's half. Nothing here is unit-testable — see the Global Constraints 
   - `ReviewView.openNote(offset: number): Promise<void>` — public; Task 7 calls it
   - `ReviewView.load(): Promise<void>` — awaitable reload; `refresh()` becomes a wrapper
 
-- [ ] **Step 1: Extend the imports**
+- [x] **Step 1: Extend the imports**
 
 In `src/review-view.ts`, add the two transforms to the `./critic` import:
 
@@ -643,7 +643,7 @@ import {
 
 `sanitizeComment` is not imported — `setComment` applies it, and comparing a sanitised draft against the stored note is exactly what `next === content` already answers.
 
-- [ ] **Step 2: Add the two module-level helpers**
+- [x] **Step 2: Add the two module-level helpers**
 
 Below the `Card` interface (after line 65):
 
@@ -672,7 +672,7 @@ function grow(field: HTMLTextAreaElement): void {
 }
 ```
 
-- [ ] **Step 3: Add the editing record**
+- [x] **Step 3: Add the editing record**
 
 Below `focusedOffset` (line 78):
 
@@ -689,7 +689,7 @@ Below `focusedOffset` (line 78):
   private editing: { offset: number; draft: string } | null = null;
 ```
 
-- [ ] **Step 4: Split `refresh()` into an awaitable `load()`**
+- [x] **Step 4: Split `refresh()` into an awaitable `load()`**
 
 Replace the whole of `refresh()` (lines 166-196) with:
 
@@ -746,7 +746,7 @@ Replace the whole of `refresh()` (lines 166-196) with:
   }
 ```
 
-- [ ] **Step 5: Reconcile and rebuild the field in `paint()`**
+- [x] **Step 5: Reconcile and rebuild the field in `paint()`**
 
 At the very top of `paint()`, before `paintHeader()`:
 
@@ -777,7 +777,7 @@ And at the very end of `paint()`, after the `focusedOffset` block:
     }
 ```
 
-- [ ] **Step 6: Draw the note row**
+- [x] **Step 6: Draw the note row**
 
 In `buildCard`, replace the comment block (lines 261-263) with:
 
@@ -799,7 +799,7 @@ In `buildCard`, replace the comment block (lines 261-263) with:
 
 `entry.comment` is truthy only for a note with text, so `''` and `null` both fall through to nothing — the two states the card draws alike. Task 6 gives them their affordance.
 
-- [ ] **Step 7: Guard the card's keydown handler**
+- [x] **Step 7: Guard the card's keydown handler**
 
 In `buildCard`, replace the keydown listener (lines 278-283):
 
@@ -816,7 +816,7 @@ In `buildCard`, replace the keydown listener (lines 278-283):
     });
 ```
 
-- [ ] **Step 8: Build the field**
+- [x] **Step 8: Build the field**
 
 Add below `paintQuote`:
 
@@ -855,7 +855,7 @@ Add below `paintQuote`:
   }
 ```
 
-- [ ] **Step 9: Open and close**
+- [x] **Step 9: Open and close**
 
 Add below `focusAt`:
 
@@ -923,7 +923,7 @@ Add below `focusAt`:
   }
 ```
 
-- [ ] **Step 10: Use the extracted guard in `act()`**
+- [x] **Step 10: Use the extracted guard in `act()`**
 
 In `act()`, replace the inline check (lines 356-371) with:
 
@@ -938,7 +938,7 @@ In `act()`, replace the inline check (lines 356-371) with:
 
 The comment that stood above it now lives on `stillThere`.
 
-- [ ] **Step 11: Style the note and the field**
+- [x] **Step 11: Style the note and the field**
 
 Two edits in `styles.css`.
 
@@ -1003,7 +1003,7 @@ Then add the new rules directly below it:
 }
 ```
 
-- [ ] **Step 12: Build and typecheck**
+- [x] **Step 12: Build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0. No test changes — every decision this task makes was tested in Tasks 1-4.
@@ -1026,7 +1026,7 @@ Open a note containing `Sie {--ging--}{>>zu spät?<<} fort.` with the drawer ope
 
 **If the open field is hard to tell from the resting note**, add `background-color: var(--background-modifier-form-field);` to `.sheet-review-comment-input` and note it in the commit body. Do not add a border — the field sits flush with a 13px prose line and a border would shift every card by two pixels on open.
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add src/review-view.ts styles.css
@@ -1059,7 +1059,7 @@ EOF
 **Interfaces:**
 - Consumes: `openNote` (Task 5). Produces nothing new.
 
-- [ ] **Step 1: Add the button**
+- [x] **Step 1: Add the button**
 
 In `buildCard`, immediately after `const actions = el.createDiv({ cls: 'sheet-review-actions' });` and before the `isSuggestion` branch:
 
@@ -1081,7 +1081,7 @@ In `buildCard`, immediately after `const actions = el.createDiv({ cls: 'sheet-re
 
 Not `is-primary`: Accept and Resolve are the primary act on a card, and a second accent button would flatten that.
 
-- [ ] **Step 2: Build and typecheck**
+- [x] **Step 2: Build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
@@ -1099,7 +1099,7 @@ In a note containing `Sie {--ging--} fort.` and `Sie ging.{>>Mehr Luft<<}`:
    if it does not, that a second click gets there.
 5. Confirm the comment card — which has a note — shows **Resolve** and no **Note** button.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/review-view.ts
@@ -1130,7 +1130,7 @@ The broken command. `wrapSelection` loses its comment branch and its caret arith
 - Consumes: `ReviewView.openNote` (Task 5)
 - Produces: `SheetNavigatorPlugin.startNote(offset: number): Promise<void>` — private
 
-- [ ] **Step 1: Give WRAPPERS its missing member**
+- [x] **Step 1: Give WRAPPERS its missing member**
 
 In `src/main.ts`, replace the `WRAPPERS` declaration:
 
@@ -1148,7 +1148,7 @@ const WRAPPERS: Record<MarkupKind, [string, string]> = {
 
 The `Exclude<MarkupKind, "comment">` goes; the branch it existed for goes with it.
 
-- [ ] **Step 2: Collapse `wrapSelection`**
+- [x] **Step 2: Collapse `wrapSelection`**
 
 Replace `wrapSelection` and its docstring:
 
@@ -1189,7 +1189,7 @@ Replace `wrapSelection` and its docstring:
   }
 ```
 
-- [ ] **Step 3: Correct the `activateReviewView` docstring**
+- [x] **Step 3: Correct the `activateReviewView` docstring**
 
 ```ts
   /**
@@ -1202,7 +1202,7 @@ Replace `wrapSelection` and its docstring:
    */
 ```
 
-- [ ] **Step 4: Correct the drawer's empty state**
+- [x] **Step 4: Correct the drawer's empty state**
 
 In `src/review-view.ts`, line 214:
 
@@ -1214,7 +1214,7 @@ In `src/review-view.ts`, line 214:
 
 The old text — *"…press ⌘⇧M to leave a note"* — described the model where the note was left in the manuscript.
 
-- [ ] **Step 5: Build and typecheck**
+- [x] **Step 5: Build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0. `Record<MarkupKind, …>` now demands all four keys, so a missing `comment` entry would have failed here.
@@ -1232,7 +1232,7 @@ This is the handoff the spec names as most likely not to work first try.
 
 **If the field does not take focus**, the cause is ordering, not the field: log inside `openNote` after `await this.load()` to confirm the card was found. A card found but not focused means `revealLeaf` restored focus after `paint()`; a card not found means the read ran before the editor's change reached `readLiveContent`.
 
-- [ ] **Step 7: Bring the README in line**
+- [x] **Step 7: Bring the README in line**
 
 `README.md` describes the old model in four places.
 
@@ -1260,7 +1260,7 @@ Keep the third sentence, about an unanchored comment, unchanged.
 - A note may run to several lines but cannot hold a blank line or its own `<<}` — CriticMarkup has no escape syntax, so a blank line would end the mark and `<<}` would close it early. Both are defused as the note is written, and what the card shows afterwards is what was stored.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/main.ts src/review-view.ts README.md
