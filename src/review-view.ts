@@ -271,7 +271,9 @@ export class ReviewView extends ItemView {
     if (this.cards.length === 0) {
       this.listEl
         .createDiv({ cls: 'sheet-review-empty' })
-        .setText(`Nothing to review. Select text and press ${COMMENT_HOTKEY} to leave a note.`);
+        .setText(
+          `Nothing to review. Select a passage and press ${COMMENT_HOTKEY}; the note is typed here.`
+        );
       return;
     }
 

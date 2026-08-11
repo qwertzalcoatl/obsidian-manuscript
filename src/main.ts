@@ -49,10 +49,14 @@ const COUNT_DEBOUNCE = 300;
 /** The constructs a selection can be wrapped in directly, without a prompt. */
 type MarkupKind = "comment" | "highlight" | "deletion" | "insertion";
 
-const WRAPPERS: Record<Exclude<MarkupKind, "comment">, [string, string]> = {
+const WRAPPERS: Record<MarkupKind, [string, string]> = {
   highlight: ["{==", "==}"],
   deletion: ["{--", "--}"],
   insertion: ["{++", "++}"],
+  // A comment is an anchor plus an empty note. Nothing goes between the note's
+  // own markers here — that text is typed on the card, and an empty note that
+  // is never written gets removed again when the field closes.
+  comment: ["{==", "==}{>><<}"],
 };
 
 interface SheetNavigatorSettings {
@@ -1460,26 +1464,36 @@ export default class SheetNavigatorPlugin extends Plugin {
   /**
    * Wraps the selection in markup and opens the drawer.
    *
-   * For a comment the cursor lands between the `{>>` and `<<}` so the note can
-   * be typed straight into the manuscript — the drawer is for reviewing, the
-   * editor is for writing.
+   * A comment is the one kind whose content is not manuscript text, so it is
+   * the one kind that takes the caret with it: the note is typed on its card,
+   * with the drawer focused and the field already open. The other three leave
+   * the caret in the sentence, which is where writing carries on.
    */
   private async wrapSelection(editor: Editor, kind: MarkupKind): Promise<void> {
     const selection = editor.getSelection();
     if (!selection) return;
 
     const start = editor.posToOffset(editor.getCursor("from"));
+    const [open, close] = WRAPPERS[kind];
+    editor.replaceSelection(`${open}${selection}${close}`);
 
-    if (kind === "comment") {
-      const anchor = `{==${selection}==}`;
-      editor.replaceSelection(`${anchor}{>><<}`);
-      // Just past the `{>>`, so the note can be typed immediately.
-      editor.setCursor(editor.offsetToPos(start + anchor.length + 3));
-    } else {
-      editor.replaceSelection(`${WRAPPERS[kind][0]}${selection}${WRAPPERS[kind][1]}`);
+    if (kind === "comment") await this.startNote(start);
+    else await this.activateReviewView(false);
+  }
+
+  /**
+   * Opens the drawer with the caret in the note field of the entry at `offset`.
+   *
+   * Two waits, both load-bearing: revealLeaf has to have resolved before the
+   * view can be asked for anything, and openNote re-reads the sheet before it
+   * looks for the card, because the markup was written a moment ago and the
+   * drawer has not parsed it yet.
+   */
+  private async startNote(offset: number): Promise<void> {
+    await this.activateReviewView();
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)) {
+      if (leaf.view instanceof ReviewView) await leaf.view.openNote(offset);
     }
-
-    await this.activateReviewView(false);
   }
 
   private resolveAll(editor: Editor, transform: (content: string) => string): void {
@@ -1548,7 +1562,9 @@ export default class SheetNavigatorPlugin extends Plugin {
    * Opens the Review drawer in the right sidebar.
    *
    * `focus` is false when a command created markup: the caret should stay in
-   * the manuscript so the comment can be typed, with the drawer merely visible.
+   * the manuscript, with the drawer merely visible. A comment inverts that and
+   * does not come through here — its content is not manuscript text, so the
+   * caret follows it into the drawer. See startNote.
    */
   async activateReviewView(focus = true): Promise<void> {
     const { workspace } = this.app;

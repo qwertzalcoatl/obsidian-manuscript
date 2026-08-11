@@ -72,7 +72,7 @@ Obsidian's own syntax is read too: `%%Kommentar%%` is a standalone comment, and 
 
 Marked-up prose is prose you edit in place. Click into it and type — the syntax stays out of the way, and you never have to settle a suggestion just to gain typing access to the words around it. Arrow keys step over the hidden markers in one press rather than stalling on characters that aren't there, and a Backspace that would break a mark selects the whole thing first, so a construct cannot quietly degrade into plain text.
 
-Comments live in the drawer, not in the prose. A mark carrying one is drawn with a dotted underline; the note itself is on its card. A comment with no text anchored to it — one Claude left on a line of its own, say — shows in the drawer and the mark count but nowhere on the page.
+Comments live in the drawer, not in the prose — and they are written there too. A mark carrying one is drawn with a dotted underline; the note itself is on its card, where you click it to write or change it. A comment with no text anchored to it — one Claude left on a line of its own, say — shows in the drawer and the mark count but nowhere on the page.
 
 If a mark ever needs repairing by hand, **Show markup source at cursor** unfolds the one under the caret, braces and all. It folds itself back when you move away. That command is the only thing in the plugin that puts syntax on screen.
 
@@ -80,6 +80,7 @@ If a mark ever needs repairing by hand, **Show markup source at cursor** unfolds
 
 Open the drawer from the **Review button** in the navigator toolbar, or the command palette. Each mark becomes a card showing the affected text as the change itself: struck through for a deletion, underlined for an insertion. Click a card to jump to it in the editor.
 
+- **Click a card's note** to write or change it; `⌘↵` or clicking away commits, `Escape` cancels. A note cleared to nothing is removed, and a card with no note yet offers one from its actions row.
 - **Accept / Reject** decide a suggestion
 - **Resolve** clears a highlight or comment, leaving the text
 - **⋯ → Accept all / Reject all** settles the whole note in one step; either way the highlights and comments go too
@@ -92,7 +93,7 @@ Every construct has a command, so the whole format is reachable from the command
 
 | Command | Needs a selection | Writes |
 |---|---|---|
-| Comment on selection — `⌘⇧M` | yes | `{==Text==}{>>…<<}`, caret in the comment |
+| Comment on selection — `⌘⇧M` | yes | `{==Text==}`, then the drawer opens with the caret in its note field |
 | Highlight selection | yes | `{==Text==}` |
 | Suggest deletion | yes | `{--Text--}` |
 | Suggest insertion… | no | `{++Text++}` — wraps a selection, or asks what to insert |
@@ -108,6 +109,7 @@ The four wrapping commands are also on the editor's right-click menu. Nothing in
 
 - A mark may wrap across a soft line break but not across a blank line, so there are no multi-paragraph anchors. This also stops a stray `{++` from swallowing the rest of the note when it eventually meets a `++}`.
 - Marks do not nest. `{==a {==b==} c==}` closes at the first `==}`.
+- A note may run to several lines but cannot hold a blank line or its own `<<}` — CriticMarkup has no escape syntax, so a blank line would end the mark and `<<}` would close it early. Both are defused as the note is written, and what the card shows afterwards is what was stored.
 - **Accept all** / **Reject all** rewrite everything between the first and last mark in one edit, so the cursor can move if it was sitting between them. Deciding marks one at a time leaves the cursor exactly where it was.
 - `{--alt--}{++neu++}` is read as two separate marks, not as one substitution. Use `{~~alt~>neu~~}` for that.
 - Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
