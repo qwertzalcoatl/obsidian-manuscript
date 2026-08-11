@@ -171,9 +171,17 @@ commit:
   all. Any run of newlines separated only by spaces or tabs collapses to a single
   newline. Single newlines survive: notes are multi-line.
 - **The closing marker.** `<<}` ends the construct early, truncating the note and
-  spilling the rest into the manuscript. It becomes `<< }`. For a `%%…%%` note the
-  terminator is `%%`, which becomes `% %`. The opening `{>>` needs no treatment:
-  the regex is non-greedy, so a nested `{>>` is ordinary text inside the body.
+  spilling the rest into the manuscript. It becomes `<< }`. The opening `{>>`
+  needs no treatment: the regex is non-greedy, so a nested `{>>` is ordinary text
+  inside the body.
+- **A doubled terminator is harder.** For a `%%…%%` note the rule is not "break up
+  `%%`" but "no `%` may be followed by `%` **or by the end of the body**" — because
+  `%%` + `a%` + `%%` is `%%a%%%`, where the closing marker borrows the body's last
+  character and the note silently reads back as `a`. Probed, not reasoned: the
+  naive `%%` → `% %` substitution has exactly this bug, since `% %` ends in `%`. A
+  space after each such `%` fixes it and never shows, because `parseCritic` trims
+  what it reports. The two terminators therefore get two rules rather than one
+  clever expression.
 - **CRLF** normalises to `\n`, and the result is trimmed — the parser trims what
   it reports, so an untrimmed write would show back differently from what was
   stored.
@@ -355,9 +363,10 @@ and the view holds only wiring. It is also why the verification list below is no
 optional.
 
 **`sanitizeComment`** — blank lines collapse to one newline; single newlines
-survive; CRLF normalises; `<<}` becomes `<< }`; `%%` becomes `% %` for a native
-note and is left alone for a CriticMarkup one; leading and trailing whitespace go;
-an empty and a whitespace-only input both give `''`.
+survive; CRLF normalises; `<<}` becomes `<< }`; `%%` becomes `% %` and a trailing
+`%` gains a space, both only for a native note and neither for a CriticMarkup one;
+leading and trailing whitespace go; an empty and a whitespace-only input both give
+`''`.
 
 **`setComment`** — inserts a note on an anchor that has none; replaces an existing
 body; keeps a `%%…%%` note in its own form rather than converting it; empty text
