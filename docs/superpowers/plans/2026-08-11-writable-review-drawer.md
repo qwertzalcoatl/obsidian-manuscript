@@ -1230,7 +1230,25 @@ This is the handoff the spec names as most likely not to work first try.
 5. Right-click a selection → **Comment on selection**. Same behaviour as the hotkey.
 6. Confirm the other three wrapping commands still leave the caret in the manuscript, and that **Suggest insertion…** and **Suggest replacement…** still open their modals and still leave the caret there.
 
+**The symptom to watch for** is ⌘⇧M degrading into **Highlight selection**: the word gets highlighted, no field appears, and the source reads `{==Wort==}` with no note. That is focus being taken back after `paint()` claimed it — the textarea blurs, `closeNote` commits an empty draft, and `setComment` removes the note it was about to be typed into. Nothing is corrupted and ⌘Z undoes it, but the command looks like it did the wrong thing.
+
 **If the field does not take focus**, the cause is ordering, not the field: log inside `openNote` after `await this.load()` to confirm the card was found. A card found but not focused means `revealLeaf` restored focus after `paint()`; a card not found means the read ran before the editor's change reached `readLiveContent`.
+
+For the first, the fallback is to claim focus a frame later, which is the idiom `collapse()` already uses for the same reason — letting the browser finish what it was doing first. In `paint()`:
+
+```ts
+      if (field instanceof HTMLTextAreaElement) {
+        grow(field);
+        // A frame later, so Obsidian's own post-reveal focus work lands first
+        // and this claim is the last one made.
+        window.requestAnimationFrame(() => {
+          field.focus();
+          field.setSelectionRange(field.value.length, field.value.length);
+        });
+      }
+```
+
+It is not applied up front because it cannot be told apart from a working handoff without running the app, and a frame of latency bought against a problem that may not exist is a bad trade.
 
 - [x] **Step 7: Bring the README in line**
 

@@ -253,6 +253,13 @@ export class ReviewView extends ItemView {
   private paint(): void {
     // A field cannot outlive its card. Without this a stale record would
     // suppress every reload for the rest of the session.
+    //
+    // It comes before the two early returns below rather than beside the
+    // rebuild at the end, because those returns take the empty-list paths and
+    // a record stranded there would never be cleared. In practice load() is
+    // suppressed while a field is open, so the only paint that reaches here
+    // with one set is openNote's — but this guard is what makes that a
+    // property of the code rather than of the call graph.
     const open = this.editing;
     if (open !== null && !this.cards.some((c) => c.entry.from === open.offset)) {
       this.editing = null;
