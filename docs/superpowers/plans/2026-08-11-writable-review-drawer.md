@@ -401,7 +401,10 @@ describe('setComment — writing a note into the source', () => {
         const after = setComment(content, before[0], text);
         const reparsed = parseCritic(after);
         expect(reparsed).toHaveLength(before.length);
-        expect(reparsed[0].comment).toBe(sanitizeComment(text).trim());
+        // Found by offset, not by index: a hostile body that made the scan
+        // split differently would otherwise pass or fail for the wrong reason.
+        const written = reparsed.find((e) => e.from === before[0].from);
+        expect(written?.comment).toBe(sanitizeComment(text).trim());
       }
     }
   });
@@ -414,7 +417,8 @@ describe('setComment — writing a note into the source', () => {
       const after = setComment(content, before[0], text);
       const reparsed = parseCritic(after);
       expect(reparsed).toHaveLength(1);
-      expect(reparsed[0].comment).toBe(sanitizeComment(text, '%%').trim());
+      const written = reparsed.find((e) => e.from === before[0].from);
+      expect(written?.comment).toBe(sanitizeComment(text, '%%').trim());
       // Still Obsidian's own form, not converted to CriticMarkup on the way.
       expect(after).toContain('%%');
     }
@@ -1014,6 +1018,11 @@ Open a note containing `Sie {--ging--}{>>zu spät?<<} fort.` with the drawer ope
 4. Open it, press Enter twice, type, and commit. The stored note has one line break, not two, and the construct still renders as a dotted underline rather than as raw braces.
 5. Open a field, type, wait three seconds without touching anything, type again. Nothing is lost. (This is the repaint: `editor-change` fires on the write, and `REFRESH_DELAY` is 200ms.)
 6. Press the space bar in an open field. It types a space; it does not scroll the editor.
+7. **The stale card.** With a field open, change the file from outside Obsidian so the
+   entry moves, then press Escape. `card` is the object the card was built from, one
+   parse old, so the cancel path must land on the refused-with-a-notice branch — not
+   write its own stale text back. Confirm the notice, and confirm the manuscript is
+   untouched.
 
 **If the open field is hard to tell from the resting note**, add `background-color: var(--background-modifier-form-field);` to `.sheet-review-comment-input` and note it in the commit body. Do not add a border — the field sits flush with a 13px prose line and a border would shift every card by two pixels on open.
 
@@ -1084,7 +1093,11 @@ In a note containing `Sie {--ging--} fort.` and `Sie ging.{>>Mehr Luft<<}`:
 1. Hover the deletion's card. A **Note** button appears to the left of Reject and Accept.
 2. Click it, type, commit. `{>>…<<}` appears in the source flush against `--}`, the card shows the note, and the manuscript shows a dotted underline over `ging`.
 3. Tab to a card with the drawer focused and confirm the button is reachable and the row appears.
-4. Confirm the comment card — which has a note — shows **Resolve** and no **Note** button.
+4. **With a field already open on another card**, click this card's **Note** button.
+   Blur commits first and the reload rebuilds every row, so the button moves out from
+   under the pointer mid-click; confirm the field still opens on the right card, and
+   if it does not, that a second click gets there.
+5. Confirm the comment card — which has a note — shows **Resolve** and no **Note** button.
 
 - [ ] **Step 4: Commit**
 
