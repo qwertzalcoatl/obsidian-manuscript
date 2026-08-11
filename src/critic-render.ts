@@ -155,6 +155,20 @@ export function criticDecorations(state: EditorState): DecorationSet {
       });
     }
 
+    // The only thing left saying a note exists here, now that the glyph has
+    // gone: without it a commented deletion and a bare one are identical, and
+    // with the drawer closed the note is invisible. On the whole construct
+    // rather than the quote, so one rule serves all four anchored kinds — and
+    // so a substitution's dotted rule does not land on its struck-through
+    // half, where two lines would fight.
+    if (entry.comment !== null && entry.kind !== 'comment') {
+      ranges.push({
+        from: entry.from,
+        to: entry.to,
+        value: Decoration.mark({ class: 'sn-critic-has-comment' }),
+      });
+    }
+
     // With its markers revealed, the construct is markup in prose colour on a
     // prose line. A wash over the whole span — braces, comment body and all —
     // says where the markup ends and the sentence resumes.
@@ -546,8 +560,16 @@ export function renderCriticMarkup(root: HTMLElement): void {
       for (const marker of entry.spans.markers) {
         if (nonEmpty(marker)) ops.push({ ...marker, op: 'hide' });
       }
+      // Here the class rides the quote rather than the whole construct: the
+      // markers around it are removed from the DOM outright, so a wrapper
+      // spanning them would have nothing left to wrap. The quote is the only
+      // visible part, which is where the rule wants to be drawn anyway.
       if (nonEmpty(entry.spans.quote) && QUOTE_CLASS[entry.kind]) {
-        ops.push({ ...entry.spans.quote, op: 'wrap', cls: QUOTE_CLASS[entry.kind], label });
+        const cls =
+          entry.comment === null
+            ? QUOTE_CLASS[entry.kind]
+            : `${QUOTE_CLASS[entry.kind]} sn-critic-has-comment`;
+        ops.push({ ...entry.spans.quote, op: 'wrap', cls, label });
       }
       if (nonEmpty(entry.spans.replacement)) {
         ops.push({ ...entry.spans.replacement, op: 'wrap', cls: 'sn-critic-insertion', label });

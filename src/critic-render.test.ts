@@ -144,3 +144,15 @@ describe('renderCriticMarkup — what it leaves alone', () => {
     );
   });
 });
+
+describe('renderCriticMarkup — a construct carrying a note', () => {
+  it('marks the anchor of a commented deletion', () => {
+    const root = render('<p>Sie {--ging--}{>>zu spät?<<} fort.</p>');
+    expect(root.querySelector('.sn-critic-has-comment')?.textContent).toBe('ging');
+  });
+
+  it('leaves an uncommented deletion unmarked', () => {
+    const root = render('<p>Sie {--ging--} fort.</p>');
+    expect(root.querySelector('.sn-critic-has-comment')).toBeNull();
+  });
+});

@@ -532,3 +532,32 @@ describe('Live Preview decorations — an unanchored comment on its own line', (
     expect(visible('Sie ging.{>>Mehr Luft<<}')).toBe('Sie ging.');
   });
 });
+
+describe('Live Preview decorations — a construct carrying a note', () => {
+  it('marks a commented deletion', () => {
+    expect(paint('Sie {--ging--}{>>zu spät?<<} fort.')).toContainEqual(
+      expect.objectContaining({
+        cls: 'sn-critic-has-comment',
+        text: '{--ging--}{>>zu spät?<<}',
+      })
+    );
+  });
+
+  it('marks a commented annotation', () => {
+    expect(paint('Sie {==ging==}{>>warum?<<} fort.')).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-has-comment' })
+    );
+  });
+
+  it('leaves an uncommented construct of the same kind unmarked', () => {
+    expect(paint('Sie {--ging--} fort.').map((d) => d.cls)).not.toContain(
+      'sn-critic-has-comment'
+    );
+  });
+
+  it('does not mark a standalone comment, which has no anchor to mark', () => {
+    expect(paint('Sie ging.{>>warum?<<}').map((d) => d.cls)).not.toContain(
+      'sn-critic-has-comment'
+    );
+  });
+});

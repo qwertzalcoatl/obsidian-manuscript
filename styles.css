@@ -404,6 +404,18 @@
   border-radius: 2px;
 }
 
+/* A note lives here. This is the only thing that says so — the drawer may be
+   closed, and there is no glyph any more. Dotted rather than a heavier solid
+   rule because both existing decorations are solid, a strikethrough on
+   deletions and a bottom border on insertions, so a dotted line reads as a
+   different kind of statement instead of a louder version of the same one. */
+.sn-critic-has-comment {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--text-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 /* {~~alt~>neu~~} contains a ~~ pair, which Obsidian's own Markdown parser
    reads as ordinary strikethrough — a second, prose-coloured line across
    arrow and replacement too. CodeMirror nests the editor's mark and ours in
