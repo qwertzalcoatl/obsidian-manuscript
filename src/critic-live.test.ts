@@ -562,3 +562,22 @@ describe('Live Preview decorations — a construct carrying a note', () => {
     );
   });
 });
+
+describe('constructToSelectOnDelete — the line a collapsed comment took with it', () => {
+  // "Sie ging.\n" is [0,10); the comment is [10,25); the collapse swallowed
+  // the newline at 9, so what the reader sees as one object is [9,25).
+  const doc = 'Sie ging.\n{>>Mehr Luft<<}\nDann Stille.';
+  const state = () => EditorState.create({ doc, extensions: [unfoldField, criticField] });
+
+  it('selects the collapsed line when delete would eat its newline', () => {
+    expect(constructToSelectOnDelete(state(), 9, true)).toEqual({ from: 9, to: 25 });
+  });
+
+  it('selects it from the far side too', () => {
+    expect(constructToSelectOnDelete(state(), 25, false)).toEqual({ from: 9, to: 25 });
+  });
+
+  it('leaves the prose above it alone', () => {
+    expect(constructToSelectOnDelete(state(), 5, false)).toBeNull();
+  });
+});

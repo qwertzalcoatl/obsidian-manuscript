@@ -240,13 +240,35 @@ export function hiddenRanges(state: EditorState): Range[] {
 
   for (const entry of state.field(criticField)) {
     if (isRevealed(unfold, entry)) continue;
-    for (const marker of entry.spans.markers) if (nonEmpty(marker)) out.push(marker);
-    if (nonEmpty(entry.spans.comment)) {
-      out.push(lineCollapseRange(state, entry) ?? entry.spans.comment);
-    }
+    out.push(...hiddenSpansOf(state, entry));
   }
 
   return out;
+}
+
+/** The ranges one entry's decorations take off the screen. */
+function hiddenSpansOf(state: EditorState, entry: Entry): Range[] {
+  const out: Range[] = [];
+  for (const marker of entry.spans.markers) if (nonEmpty(marker)) out.push(marker);
+  if (nonEmpty(entry.spans.comment)) {
+    out.push(lineCollapseRange(state, entry) ?? entry.spans.comment);
+  }
+  return out;
+}
+
+/**
+ * What the reader sees as one object: the entry's own bounds, or the whole
+ * line when an unanchored comment took the line with it.
+ *
+ * The distinction matters for deletion. A collapsed line starts one character
+ * to the left of the entry — at the newline it swallowed — so matching the
+ * entry's bounds alone leaves that newline unguarded, and a Delete there falls
+ * through to Obsidian's own command. atomicRanges then extends it across the
+ * whole hidden range: the comment gone in one keystroke, with no selection
+ * step and nothing on screen to say what happened.
+ */
+function visibleSpanOf(state: EditorState, entry: Entry): Range {
+  return lineCollapseRange(state, entry) ?? { from: entry.from, to: entry.to };
 }
 
 /**
@@ -292,12 +314,16 @@ export function constructToSelectOnDelete(
 ): Range | null {
   const from = forward ? pos : pos - 1;
   const to = from + 1;
+  const unfold = state.field(unfoldField);
 
-  const breaks = hiddenRanges(state).some((r) => from < r.to && to > r.from);
-  if (!breaks) return null;
+  for (const entry of state.field(criticField)) {
+    if (isRevealed(unfold, entry)) continue;
+    if (hiddenSpansOf(state, entry).some((r) => from < r.to && to > r.from)) {
+      return visibleSpanOf(state, entry);
+    }
+  }
 
-  const entry = state.field(criticField).find((e) => from < e.to && to > e.from);
-  return entry ? { from: entry.from, to: entry.to } : null;
+  return null;
 }
 
 // ─── Card-click flash ───
