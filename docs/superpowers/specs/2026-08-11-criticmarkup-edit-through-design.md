@@ -76,8 +76,10 @@ For each entry, unless it is the one showing raw source:
 | `spans.quote` | `Decoration.mark` with `QUOTE_CLASS[kind]` |
 | `spans.replacement` | `Decoration.mark` with `sn-critic-insertion` |
 | whole construct, substitutions only | `sn-critic-substitution` (existing strikethrough cancel) |
-| `spans.quote`, when `entry.comment !== null` | additional `has-comment` class |
+| whole construct, when `entry.comment !== null` | `sn-critic-has-comment` |
 | whole construct, when raw-revealed | `sn-critic-revealed` wash |
+
+`has-comment` goes on a construct-wide mark, not on `spans.quote`. A substitution's quote is its struck-through half, and a dotted underline drawn across struck text is mud; spanning the whole construct also means one rule works identically for all four anchored kinds. Only substitutions carry a construct-wide mark today, so this generalises that span rather than adding a new kind of decoration.
 
 The `has-comment` modifier is the only survivor of the glyph's job. With no bubble and a possibly-closed drawer, it is the sole thing telling the writer a note exists — `{--ging--}` and `{--ging--}{>>zu spät?<<}` must not look identical. It has to be legible at a glance, not a subtlety.
 
