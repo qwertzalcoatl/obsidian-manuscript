@@ -530,6 +530,48 @@ export function applyEntry(content: string, entry: Entry, mode: Mode): string {
   ]);
 }
 
+/**
+ * The document with `entry`'s note set to `text`.
+ *
+ * The counterpart to applyEntry above: that one resolves a construct, this one
+ * writes the note attached to it. Same contract — the offsets must come from a
+ * parse of this same string — and the same reason for living here rather than
+ * in the drawer, which is that the delimiters are this file's business and
+ * nowhere else's.
+ *
+ * An empty note is not a note. Clearing one removes its construct, and on a
+ * standalone comment that is exactly what resolving it does, line-emptying
+ * rule included, so the work is handed to applyEntry rather than repeated.
+ */
+export function setComment(content: string, entry: Entry, text: string): string {
+  const { comment, commentBody } = entry.spans;
+
+  // Two characters for one of Obsidian's own notes, three for CriticMarkup.
+  // The distance between the two ranges is the only thing that says which,
+  // since `native` describes the anchor on an attached comment.
+  const close: '<<}' | '%%' =
+    comment !== null && commentBody !== null && commentBody.from - comment.from === 2
+      ? '%%'
+      : '<<}';
+  const body = sanitizeComment(text, close);
+
+  if (comment === null || commentBody === null) {
+    // A note flush against the construct attaches to it: the rule up in
+    // parseCritic is whitespace but no newline between the two, and no gap at
+    // all satisfies it.
+    return body === ''
+      ? content
+      : `${content.slice(0, entry.to)}{>>${body}<<}${content.slice(entry.to)}`;
+  }
+
+  if (body !== '') {
+    return content.slice(0, commentBody.from) + body + content.slice(commentBody.to);
+  }
+
+  if (entry.kind === 'comment') return applyEntry(content, entry, 'resolve');
+  return content.slice(0, comment.from) + content.slice(comment.to);
+}
+
 function renderAll(content: string, suggestionMode: 'accept' | 'reject'): string {
   const edits = parseCritic(content).map((entry) => ({
     from: entry.from,

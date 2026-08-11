@@ -5,6 +5,7 @@ import {
   renderAccepted,
   renderRejected,
   sanitizeComment,
+  setComment,
   type Entry,
 } from './critic';
 
@@ -591,5 +592,104 @@ describe('sanitizeComment — what a note may contain', () => {
 
   it('gives an empty string for whitespace alone', () => {
     expect(sanitizeComment('  \n\t ')).toBe('');
+  });
+});
+
+describe('setComment — writing a note into the source', () => {
+  const set = (content: string, text: string) =>
+    setComment(content, parseCritic(content)[0], text);
+
+  it('adds a note to an anchor that has none', () => {
+    expect(set('Sie {--ging--} fort.', 'zu spät?')).toBe(
+      'Sie {--ging--}{>>zu spät?<<} fort.'
+    );
+  });
+
+  it('replaces an existing note', () => {
+    expect(set('Sie {--ging--}{>>zu spät?<<} fort.', 'zu früh?')).toBe(
+      'Sie {--ging--}{>>zu früh?<<} fort.'
+    );
+  });
+
+  it('fills an empty note left by the comment command', () => {
+    expect(set('Sie {==ging==}{>><<} fort.', 'warum?')).toBe(
+      'Sie {==ging==}{>>warum?<<} fort.'
+    );
+  });
+
+  it("keeps one of Obsidian's own notes in its own form", () => {
+    expect(set('Sie {--ging--}%%zu spät?%% fort.', 'zu früh?')).toBe(
+      'Sie {--ging--}%%zu früh?%% fort.'
+    );
+  });
+
+  it('sanitises on the way in', () => {
+    expect(set('Sie {--ging--} fort.', '  Erstens.\n\nZweitens.  ')).toBe(
+      'Sie {--ging--}{>>Erstens.\nZweitens.<<} fort.'
+    );
+  });
+
+  it('removes an emptied note and leaves the anchor', () => {
+    expect(set('Sie {--ging--}{>>zu spät?<<} fort.', '')).toBe('Sie {--ging--} fort.');
+  });
+
+  it('removes an emptied standalone comment', () => {
+    expect(set('Sie ging.{>>Mehr Luft<<}', '')).toBe('Sie ging.');
+  });
+
+  it('takes the line with it when the comment had the line to itself', () => {
+    expect(set('Sie ging.\n{>>Mehr Luft<<}\nDann Stille.', '')).toBe(
+      'Sie ging.\nDann Stille.'
+    );
+  });
+
+  it('changes nothing when there is no note and nothing to write', () => {
+    const content = 'Sie {--ging--} fort.';
+    expect(set(content, '   ')).toBe(content);
+  });
+
+  // The property that matters: a note can never break the container it is
+  // written into. Split by terminator because the expected text differs —
+  // parseCritic trims, and the %% rule may leave a trailing space behind.
+  const HOSTILE = ['<<}', '{>>', '%%', 'a\n\nb', 'a\nb', '}', '>>Wort<<}', '%'];
+
+  it('never lets a note break a CriticMarkup container', () => {
+    const anchors = [
+      'Sie {--ging--} fort.',
+      'Sie {++leise ++}ging.',
+      'Das {~~kalte~>fahle~~} Licht.',
+      'Sie {==ging==} fort.',
+      'Sie {==ging==}{>>warum?<<} fort.',
+      'Sie {==ging==}{>><<} fort.',
+      'Sie ging.{>>Mehr Luft<<}',
+    ];
+
+    for (const content of anchors) {
+      const before = parseCritic(content);
+      for (const text of HOSTILE) {
+        const after = setComment(content, before[0], text);
+        const reparsed = parseCritic(after);
+        expect(reparsed).toHaveLength(before.length);
+        // Found by offset, not by index: a hostile body that made the scan
+        // split differently would otherwise pass or fail for the wrong reason.
+        const written = reparsed.find((e) => e.from === before[0].from);
+        expect(written?.comment).toBe(sanitizeComment(text).trim());
+      }
+    }
+  });
+
+  it("never lets a note break one of Obsidian's own containers", () => {
+    const content = 'Sie {--ging--}%%zu spät?%% fort.';
+    const before = parseCritic(content);
+
+    for (const text of HOSTILE) {
+      const after = setComment(content, before[0], text);
+      const reparsed = parseCritic(after);
+      expect(reparsed).toHaveLength(1);
+      const written = reparsed.find((e) => e.from === before[0].from);
+      expect(written?.comment).toBe(sanitizeComment(text, '%%').trim());
+      // Still Obsidian's own form, not converted to CriticMarkup on the way.
+      expect(after).toContain('%%');
+    }
   });
 });
