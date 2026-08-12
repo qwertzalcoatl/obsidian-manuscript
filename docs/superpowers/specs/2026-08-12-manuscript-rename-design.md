@@ -111,8 +111,24 @@ Until both are changed, the vault holds a folder called `sheet-navigator` whose
 manifest declares `id: manuscript`, and an enabled-list entry pointing at an id
 no manifest claims.
 
-The ordering constraint: renaming the working directory invalidates the link's
-target, so the link has to be rebuilt after the move, not before.
+Both are fixed by one command. `mv` on a symlink renames the *link*, not its
+target, and the target is absolute — so the link keeps pointing at the working
+directory and `data.json` stays reachable:
+
+```
+# quit Obsidian first: it rewrites community-plugins.json on exit
+mv "/Users/abrell/Documents/Die fünfte Gewalt/.obsidian/plugins/sheet-navigator" \
+   "/Users/abrell/Documents/Die fünfte Gewalt/.obsidian/plugins/manuscript"
+```
+
+Reopen Obsidian and switch **Manuscript** on under Community plugins;
+`community-plugins.json` rewrites itself to `["manuscript"]`. There is no JSON
+to edit by hand.
+
+Renaming the working directory `~/Developer/sheet-navigator` is **not** part of
+this. Obsidian never sees that name — only the link name has to match the
+manifest id. It is cosmetic tidying, available whenever, and if it is done the
+link has to be repointed afterwards.
 
 Hand-set hotkeys detach regardless, being keyed on the plugin id.
 
