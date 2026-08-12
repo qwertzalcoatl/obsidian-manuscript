@@ -174,17 +174,35 @@ The archive write happens **first**; the chapter loses the text only once it has
 landed. Reversed, the worst case is prose destroyed with no copy anywhere. In
 this order the worst case is that nothing happened.
 
-1. Guards — archive folder configured, the note is not itself in the archive,
-   the selection is not pure whitespace.
+1. Guards — the editor has a backing file, the archive folder is configured, the
+   note is not itself in the archive, the selection is not pure whitespace.
 2. `expandToMarks` widens the range over any construct the selection cut.
 3. Find the archive file by frontmatter, as above.
-4. Found → `vault.process(file, appendEntry)`. Not found → create the missing
-   folder levels, then `vault.create` with frontmatter and the first entry. The
-   returned `TFile` is held rather than looked up again: `metadataCache` updates
+4. Found → append (see below). Not found → create the missing folder levels,
+   then `vault.create` with frontmatter and the first entry. The returned
+   `TFile` is held rather than looked up again: `metadataCache` updates
    asynchronously and does not yet know the file exists.
 5. Re-read the editor and confirm the range still holds the text that was
    archived. If it does, remove it.
 6. `Notice` naming the archive file.
+
+### When the archive is open in a tab
+
+You will have the archive open — that is where you go to read what you cut. If
+it is open **and** holds unsaved changes, a `vault.process` append writes to
+disk while the editor holds a different version of the same file, and whichever
+flushes last wins. The losing side can be the entry just appended: silent loss,
+in the one feature that promises nothing is ever lost.
+
+So the append follows the rule this plugin already holds. `readLiveContent`
+(`src/review-view.ts:45`) prefers an open `MarkdownView`'s editor value and only
+falls back to `vault.cachedRead` — **the live buffer is authoritative.** The
+archive write does the same: if a markdown view has this file open, the entry is
+appended through that view's editor; otherwise through `vault.process`.
+
+Writing through the editor also makes that append undoable in the archive's own
+tab, which is a wrinkle in "append-only" but a harmless one — it is the writer
+undoing in a document they have open, not the plugin removing anything.
 
 ## What can go wrong
 
@@ -195,6 +213,7 @@ this order the worst case is that nothing happened.
 | The note is itself in the archive | Refused. Archiving the archive has no meaning |
 | Archive folder does not exist | Created on first use, one level at a time |
 | Two archive files claim one origin | First in path order wins, deterministically. Only reachable by hand-editing frontmatter |
+| The archive is open with unsaved edits | Appended through that editor rather than to disk, so neither version is lost |
 | Archive write fails | Notice carries the error; the chapter is untouched |
 | The note changed mid-write | Archived but not removed, and the Notice says so. A visible duplicate beats an invisible deletion |
 
@@ -203,8 +222,12 @@ this order the worst case is that nothing happened.
 - **Undo is asymmetric.** `⌘Z` puts the text back in the chapter; the archive
   keeps its copy. Append-only means the plugin never takes anything back out of
   an archive, including something it wrote a second ago.
-- **A renumbered chapter leaves a stale archive filename.** The link is what is
-  true; the name is a convenience that was accurate when the file was made.
+- **A renamed or moved chapter leaves its archive where it was.** Renumbering
+  leaves a stale filename; moving the chapter to another folder leaves the
+  archive under the old one, so the mirror stops describing that pair. Both are
+  cosmetic — the link still resolves and the append still lands in the right
+  file. The link is what is true; the path is a convenience that was accurate
+  when the file was made.
 - **It rests on Obsidian's "Automatically update internal links."** With that
   setting off, a renumber detaches the archive and the next cut starts a second
   file. This is the one assumption the design leans on — see step 3 of the vault
@@ -234,15 +257,23 @@ Jest sees none of the vault behaviour, so these six run in Obsidian:
 1. Archive from a chapter → the file appears at the mirrored path, carrying the
    `origin` link
 2. Archive again → a second heading in the **same** file
-3. Reorder that chapter by drag-and-drop → the archive's `origin` link has been
-   rewritten by Obsidian
-4. Archive again after the reorder → still one file, no duplicate
-5. Archive with **Enable review** switched off → still works
-6. `⌘Z` after archiving → the text is back in the chapter
+3. Rename that chapter from the navigator's right-click menu → the archive's
+   `origin` link has been rewritten by Obsidian
+4. Archive again after the rename → still one file, no duplicate
+5. Archive with the archive file **open in a tab and holding unsaved edits** →
+   the entry survives
+6. Archive with **Enable review** switched off → still works
+7. `⌘Z` after archiving → the text is back in the chapter
 
-**Check 3 is load-bearing.** If Obsidian does not rewrite that link in this
-vault, the wikilink decision collapses and the fallback is stamping ids into
-both files. Better learned on day one than after fifty cuts.
+Check 3 uses the rename modal rather than drag-and-drop on purpose: reordering
+needs *Enable ordering*, which is off by default, and `RenameModal` reaches the
+same `fileManager.renameFile` at `main.ts:941` — the call that rewrites links.
+
+**Checks 3 and 4 are load-bearing, and only as a pair.** Check 3 shows the link
+changed; check 4 shows it still resolves to the right file, which is the thing
+actually being relied on. If either fails in this vault, the wikilink decision
+collapses and the fallback is stamping ids into both files. Better learned on
+day one than after fifty cuts.
 
 ## Out of scope
 
