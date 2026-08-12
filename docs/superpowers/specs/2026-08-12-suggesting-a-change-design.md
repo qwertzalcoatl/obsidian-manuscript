@@ -63,15 +63,22 @@ function of the parse, read the same way `hiddenRanges` reads it. The first
 keystroke makes the body non-empty, the widget's range disappears from the next
 decoration set, and the ordinary insertion mark takes over.
 
-It renders as **green italic ghost text with no box**, which took one revision to
-get to. The first version drew a dashed border, and the border was the mistake:
-edges made it read as an object sitting in the sentence, so typing felt like
-destroying something rather than writing. The module docstring's rule against
-badges turns out to apply here after all.
+It renders as **green italic text on a faint green wash**, which took two
+revisions to reach and both are worth keeping.
+
+The first version drew a dashed border. Edges made it an object sitting in the
+sentence, so the first keystroke read as destroying something rather than
+writing — the module docstring's rule against badges applies here after all.
+Removing the border fixed that but left the hint saying nothing about what to do
+with it. The wash says it: **marked text is something you type over.** It is the
+same 14% and 2px radius `.sn-critic-highlight` uses, in the insertion's green
+rather than the accent, so a highlight and a placeholder never read as the same
+kind of thing — and no stronger than a highlight, for the reason
+`.sn-critic-revealed` already gives.
 
 ```
 Sie insert… ging.
-    ‾‾‾‾‾‾‾  green, italic, smaller — and nothing else
+    ░░░░░░░  14% green wash, italic, full size
 ```
 
 **The caret cannot be inside it, however it is styled.** A widget is one atomic
