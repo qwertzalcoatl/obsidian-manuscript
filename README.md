@@ -15,6 +15,7 @@ Browse your vault one level at a time: chapters show as cards with note counts, 
 - **Active note highlight** — the currently open note is highlighted in the sidebar
 - **Live updates** — the list refreshes when files are created, renamed, or modified
 - **Editorial review** — suggest edits and leave comments in CriticMarkup, then accept or reject them one at a time from a side drawer
+- **Archive** — move cut text out of a chapter into an append-only archive file that stays attached to it
 
 ## How it works
 
@@ -117,6 +118,49 @@ The right-click menu carries **Comment on selection**, **Highlight selection**, 
 - Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
 - In Reading view, only CriticMarkup renders. Obsidian removes `%%comments%%` from the page before any plugin can see them, so those stay invisible there — exactly as they are without this plugin.
 
+## Archiving cut text
+
+A paragraph that is wrong *here* is often not wrong at all. **Archive selection**
+moves it out of the chapter and into an archive beside the manuscript, so
+cutting does not mean choosing between deleting and living with it.
+
+Set an archive folder in **Settings > Manuscript** first — archiving refuses
+until you do. Each note then gets one archive file, mirroring its path:
+
+```
+Manuskript/Kapitel 3/3 – Die Nachricht.md
+  →  Archiv/Manuskript/Kapitel 3/3 – Die Nachricht.md
+```
+
+Every cut from that chapter is appended to that one file under a timestamp:
+
+```markdown
+---
+origin: "[[Manuskript/Kapitel 3/3 – Die Nachricht]]"
+---
+
+## 2026-08-12 14:32
+
+Der erste gestrichene Absatz …
+
+## 2026-08-12 16:05
+
+Und noch einer …
+```
+
+The `origin` link is how an archive knows its chapter, and it is a link rather
+than a filename on purpose: reordering renumbers your files, and Obsidian
+rewrites links when it does. Renumber a chapter and its archive stays attached
+— under its old filename, which is now merely stale rather than wrong.
+
+The command is in the palette and in the right-click menu, and it needs a
+selection. A selection that cuts through a suggestion or comment is widened to
+take the whole mark, so archiving can never tear a construct in half.
+
+**The archive is append-only.** Nothing in this plugin ever deletes from an
+archive file or moves an entry back out. One consequence is worth knowing:
+`⌘Z` puts the text back in your chapter but leaves the archived copy in place.
+
 ## Settings
 
 **Settings > Community plugins > Manuscript**
@@ -125,6 +169,7 @@ The right-click menu carries **Comment on selection**, **Highlight selection**, 
 |---|---|---|
 | Enable ordering | off | Shows drag handles and renumbers folders on drop |
 | Enable review | on | Renders CriticMarkup inline and enables the Review drawer and its commands. With it off, marks are left as plain text. Obsidian needs a reload for this to take full effect. |
+| Archive folder | empty | Where **Archive selection** puts cut text. Empty disables archiving. |
 
 ## Installation
 

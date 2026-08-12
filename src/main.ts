@@ -18,6 +18,14 @@ import {
   type Hotkey,
 } from "obsidian";
 import { extractSnippet } from "./text";
+import {
+  appendEntry,
+  archivePathFor,
+  expandToMarks,
+  newArchive,
+  originLink,
+  timestamp,
+} from "./archive";
 import { parseCritic, renderAccepted, renderRejected, suggestChange } from "./critic";
 import {
   criticEditorExtension,
@@ -62,11 +70,14 @@ const WRAPPERS: Record<MarkupKind, [string, string]> = {
 interface ManuscriptSettings {
   orderingEnabled: boolean;
   reviewEnabled: boolean;
+  /** Archive root. Empty means unconfigured, and archiving refuses. */
+  archiveFolder: string;
 }
 
 const DEFAULT_SETTINGS: ManuscriptSettings = {
   orderingEnabled: false,
   reviewEnabled: true,
+  archiveFolder: "",
 };
 
 interface HistoryEntry {
@@ -1104,6 +1115,21 @@ class ManuscriptSettingTab extends PluginSettingTab {
           new Notice("Reload Obsidian to finish applying this change.");
         })
       );
+
+    new Setting(containerEl)
+      .setName("Archive folder")
+      .setDesc(
+        "Where cut text goes. Each note gets one archive file, mirroring its path under this folder. Leave empty to disable archiving."
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("Archiv")
+          .setValue(this.plugin.settings.archiveFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.archiveFolder = value;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 }
 
@@ -1251,6 +1277,185 @@ export default class ManuscriptPlugin extends Plugin {
         return false;
       },
     });
+
+    this.loadArchive();
+  }
+
+  // ─── Archive ───
+
+  /**
+   * Registered outside loadReview: archiving cut prose is not an editorial
+   * pass, and it has to keep working with "Enable review" switched off.
+   */
+  private loadArchive(): void {
+    this.addCommand({
+      id: "archive-selection",
+      name: "Archive selection",
+      editorCheckCallback: (checking, editor) => {
+        if (!editor.somethingSelected()) return false;
+        if (!checking) void this.archiveSelection(editor);
+        return true;
+      },
+    });
+
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor) => {
+        if (!editor.somethingSelected()) return;
+        // Its own separator: with review on this parts it from the markup
+        // actions, and with review off it still stands apart from Obsidian's.
+        menu.addSeparator();
+        menu.addItem((item) =>
+          item
+            .setTitle("Archive selection")
+            .setIcon("archive")
+            .onClick(() => void this.archiveSelection(editor))
+        );
+      })
+    );
+  }
+
+  /**
+   * Moves the selection into the archive file belonging to this note.
+   *
+   * The archive is written *first* and the manuscript loses the text only once
+   * it has landed. Reversed, a failed write destroys prose with no copy
+   * anywhere; in this order a failed write means nothing happened.
+   */
+  private async archiveSelection(editor: Editor): Promise<void> {
+    const origin = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+    if (!origin) return;
+
+    const root = this.settings.archiveFolder.trim().replace(/\/+$/, "");
+    if (!root) {
+      new Notice("Set an archive folder in Settings → Manuscript first.");
+      return;
+    }
+    if (origin.path === root || origin.path.startsWith(`${root}/`)) {
+      new Notice("This note is already in the archive.");
+      return;
+    }
+
+    const content = editor.getValue();
+    const { from, to } = expandToMarks(
+      content,
+      editor.posToOffset(editor.getCursor("from")),
+      editor.posToOffset(editor.getCursor("to"))
+    );
+    const text = content.slice(from, to);
+    if (!text.trim()) {
+      new Notice("That selection is only whitespace.");
+      return;
+    }
+
+    const stamp = timestamp(new Date());
+    let target: TFile;
+    try {
+      const existing = this.findArchiveFor(origin, root);
+      if (existing) {
+        await this.appendToArchive(existing, stamp, text);
+        target = existing;
+      } else {
+        const path = archivePathFor(origin.path, root);
+        await this.ensureFolder(parentOf(path));
+        // The returned handle is kept rather than looked up again:
+        // metadataCache updates asynchronously and does not know this file yet.
+        target = await this.app.vault.create(
+          path,
+          newArchive(originLink(origin.path), stamp, text)
+        );
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      new Notice(`Manuscript: could not write the archive — ${reason}`);
+      return;
+    }
+
+    // The note may have moved under us while the archive was being written —
+    // a background sync, a fast typist. Cutting a range that no longer holds
+    // what was archived would delete the wrong words, so it is left alone. A
+    // duplicate you can see beats a deletion you cannot.
+    if (editor.getValue().slice(from, to) !== text) {
+      new Notice(
+        `Archived to ${target.path}, but the note changed — the text was left in place.`
+      );
+      return;
+    }
+
+    editor.replaceRange("", editor.offsetToPos(from), editor.offsetToPos(to));
+    new Notice(`Archived to ${target.path}`);
+  }
+
+  /**
+   * The archive file whose `origin` link resolves to this note, if one exists.
+   *
+   * Frontmatter is the truth and the filename is a convenience: reordering
+   * renames manuscript files, Obsidian rewrites the link, and the archive keeps
+   * the name it was created under. Deriving the path and trusting it would find
+   * nothing after the first reorder and start a second archive.
+   *
+   * Sorted, so two files claiming the same origin — only reachable by editing
+   * frontmatter by hand — resolve to the same one every time.
+   */
+  private findArchiveFor(origin: TFile, root: string): TFile | null {
+    const prefix = `${root}/`;
+    const candidates = this.app.vault
+      .getMarkdownFiles()
+      .filter((file) => file.path.startsWith(prefix))
+      .sort((a, b) => a.path.localeCompare(b.path));
+
+    for (const file of candidates) {
+      const link = this.app.metadataCache
+        .getFileCache(file)
+        ?.frontmatterLinks?.find((entry) => entry.key === "origin");
+      if (!link) continue;
+      if (this.app.metadataCache.getFirstLinkpathDest(link.link, file.path) === origin) {
+        return file;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Appends one entry, through the editor when the archive is open in a tab.
+   *
+   * An open tab with unsaved changes holds a different version of the file than
+   * the disk does, and a `vault.process` write would race it — losing whichever
+   * side flushed first, which can be the entry just archived. `readLiveContent`
+   * in review-view.ts settles this the same way: the live buffer wins.
+   */
+  private async appendToArchive(file: TFile, stamp: string, text: string): Promise<void> {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && view.file?.path === file.path) {
+        const editor = view.editor;
+        const body = editor.getValue();
+        // Whole-document replace rather than an insert at the end, because
+        // appendEntry normalises the trailing newlines it is appending after.
+        // Same shape as resolveAll, and one undo step.
+        editor.replaceRange(
+          appendEntry(body, stamp, text),
+          editor.offsetToPos(0),
+          editor.offsetToPos(body.length)
+        );
+        return;
+      }
+    }
+    await this.app.vault.process(file, (data) => appendEntry(data, stamp, text));
+  }
+
+  /** Creates a folder and every missing level above it. */
+  private async ensureFolder(path: string): Promise<void> {
+    if (!path) return;
+    let current = "";
+    for (const part of path.split("/")) {
+      current = current ? `${current}/${part}` : part;
+      if (this.app.vault.getAbstractFileByPath(current)) continue;
+      try {
+        await this.app.vault.createFolder(current);
+      } catch {
+        // Already there — another call won the race, or the cache was stale.
+      }
+    }
   }
 
   // ─── Review ───
