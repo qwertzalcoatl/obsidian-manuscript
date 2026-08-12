@@ -1348,9 +1348,35 @@ export default class SheetNavigatorPlugin extends Plugin {
           return;
         }
 
-        const start = editor.posToOffset(editor.getCursor("from"));
-        editor.replaceSelection(change.text);
-        editor.setCursor(editor.offsetToPos(start + change.caret));
+        const from = editor.posToOffset(editor.getCursor("from"));
+        const to = editor.posToOffset(editor.getCursor("to"));
+
+        // One transaction, not a replaceSelection followed by a setCursor.
+        // Anything that lands between two dispatches — Obsidian's own selection
+        // handling, the drawer taking and returning focus — can leave the caret
+        // at the end of the construct instead of in its empty body, and there
+        // it types *outside* the markup it just wrote.
+        //
+        // The symptom is legible once you know it: with the caret in the body
+        // the placeholder draws to its right, and with the caret at the end of
+        // the construct the placeholder draws to its left. Rendered both ways
+        // to confirm it rather than reasoned about.
+        //
+        // Also one undo step rather than two.
+        const cm = (editor as unknown as { cm?: CmEditorView }).cm;
+        if (cm) {
+          cm.dispatch({
+            changes: { from, to, insert: change.text },
+            selection: { anchor: from + change.caret },
+          });
+        } else {
+          // `cm` is undocumented-but-established — see reveal() in
+          // review-view.ts. Without it the markup is still written; only the
+          // caret is placed the fragile way.
+          editor.replaceSelection(change.text);
+          editor.setCursor(editor.offsetToPos(from + change.caret));
+        }
+
         void this.activateReviewView(false);
       },
     });
