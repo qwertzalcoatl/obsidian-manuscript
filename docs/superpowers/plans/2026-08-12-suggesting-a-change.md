@@ -36,7 +36,7 @@ The arithmetic that broke ⌘⇧M, moved somewhere it can be tested. A selection
 **Interfaces:**
 - Produces: `suggestChange(selection: string): { text: string; caret: number } | null` — `caret` is an offset into `text`; null when the selection cannot be wrapped.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/critic.test.ts` (add `suggestChange` to the import from `./critic`):
 
@@ -82,12 +82,12 @@ describe('suggestChange — what the command writes', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest src/critic.test.ts -t suggestChange`
 Expected: FAIL — `suggestChange` is not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/critic.ts`, directly below `setComment`:
 
@@ -119,12 +119,12 @@ export function suggestChange(selection: string): { text: string; caret: number 
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest src/critic.test.ts -t suggestChange`
 Expected: PASS.
 
-- [ ] **Step 5: Write the regression test that matters**
+- [x] **Step 5: Write the regression test that matters**
 
 The caret must be somewhere the caret can actually be. Append to `src/critic-live.test.ts` (add `suggestChange` to the `./critic` import, which currently brings in `parseCritic`):
 
@@ -162,12 +162,12 @@ describe('suggestChange — the caret lands somewhere it can rest', () => {
 });
 ```
 
-- [ ] **Step 6: Run the full suite, build and typecheck**
+- [x] **Step 6: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/critic.ts src/critic.test.ts src/critic-live.test.ts
@@ -200,7 +200,7 @@ Forced by the empty replacement. Its mark is zero-width, CodeMirror drops it, an
 **Interfaces:**
 - Produces: the CSS class `sn-critic-arrow`, drawn in all three surfaces. `sn-critic-replacement` and `sheet-review-arrow` cease to exist.
 
-- [ ] **Step 1: Teach the test helper to see widgets**
+- [x] **Step 1: Teach the test helper to see widgets**
 
 A widget carries no `spec.class`, so `paint` currently reports it as an empty class — indistinguishable from a hidden marker. In `src/critic-live.test.ts`, add above `paint`:
 
@@ -214,7 +214,7 @@ function classOf(value: { spec: unknown }): string {
 
 and use it in both collectors — `paint` and `paintUnfolded` — replacing `cls: (value.spec.class as string) ?? ''` with `cls: classOf(value)`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 In `src/critic-live.test.ts`, line 114 expects the class the replacement no longer carries. Change:
 
@@ -275,12 +275,12 @@ In `src/critic-render.test.ts`, replace the two blocks at lines 160-171 that que
   });
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `npx jest src/critic-live.test.ts src/critic-render.test.ts`
 Expected: FAIL — no `sn-critic-arrow` is produced anywhere.
 
-- [ ] **Step 4: Add the widget**
+- [x] **Step 4: Add the widget**
 
 In `src/critic-render.ts`, add `WidgetType` to the `@codemirror/view` import:
 
@@ -335,7 +335,7 @@ function isArrowMarker(entry: Entry, marker: Range): boolean {
 }
 ```
 
-- [ ] **Step 5: Use it in Live Preview**
+- [x] **Step 5: Use it in Live Preview**
 
 In `criticDecorations`, replace the marker loop:
 
@@ -356,7 +356,7 @@ and drop the second class from the replacement mark, along with the comment expl
     mark(entry.spans.replacement, 'sn-critic-insertion');
 ```
 
-- [ ] **Step 6: Use it in Reading view**
+- [x] **Step 6: Use it in Reading view**
 
 In `src/critic-render.ts`, widen `Op`:
 
@@ -425,12 +425,12 @@ and drop the second class from the replacement op:
           cls: 'sn-critic-insertion',
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `npx jest src/critic-live.test.ts src/critic-render.test.ts`
 Expected: PASS.
 
-- [ ] **Step 8: Move the drawer card onto the same class**
+- [x] **Step 8: Move the drawer card onto the same class**
 
 In `src/review-view.ts:416`:
 
@@ -438,7 +438,7 @@ In `src/review-view.ts:416`:
       el.createSpan({ cls: 'sn-critic-arrow' }).setText('→');
 ```
 
-- [ ] **Step 9: Replace the styles**
+- [x] **Step 9: Replace the styles**
 
 In `styles.css`, **delete** the whole `.sn-critic-replacement::before` block including its comment, and **delete** the `.sheet-review-arrow` block. Add in the deleted `::before`'s place:
 
@@ -456,7 +456,7 @@ In `styles.css`, **delete** the whole `.sn-critic-replacement::before` block inc
 }
 ```
 
-- [ ] **Step 10: Run the full suite, build and typecheck**
+- [x] **Step 10: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
@@ -470,7 +470,7 @@ In a note containing `Das {~~kalte~>fahle~~} Licht.`:
 3. Open the drawer and confirm the card's arrow is identical to the editor's.
 4. Arrow-key across the construct from right to left. The arrow is a replaced range like any other marker, so it should be one press — confirm no press appears to do nothing.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add src/critic-render.ts src/critic-live.test.ts src/critic-render.test.ts src/review-view.ts styles.css
@@ -511,7 +511,7 @@ The heart of it. An empty body has no width, both its markers are hidden, and a 
 - Consumes: `criticField`, `unfoldField`, `isRevealed`
 - Produces: `emptyBodyOf(entry: Entry): Range | null` — exported, used by Task 4; the CSS class `sn-critic-placeholder`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/critic-live.test.ts` (add `emptyBodyOf` to the `./critic-render` import):
 
@@ -577,12 +577,12 @@ describe('Live Preview decorations — the placeholder', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest src/critic-live.test.ts -t "emptyBodyOf|placeholder"`
 Expected: FAIL — `emptyBodyOf` is not exported.
 
-- [ ] **Step 3: Implement the widget and the rule**
+- [x] **Step 3: Implement the widget and the rule**
 
 In `src/critic-render.ts`, below `ArrowWidget`:
 
@@ -646,12 +646,12 @@ In `criticDecorations`, add directly after `if (revealed) continue;` — a const
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest src/critic-live.test.ts -t "emptyBodyOf|placeholder"`
 Expected: PASS.
 
-- [ ] **Step 5: Draw the same thing on the card**
+- [x] **Step 5: Draw the same thing on the card**
 
 An empty insertion is an entry like any other, so the drawer gives it a card — with a blank line where the quote should be. In `src/review-view.ts`, replace `paintQuote`'s body below the comment branch:
 
@@ -686,7 +686,7 @@ An empty insertion is an entry like any other, so the drawer gives it a card —
     span(entry.quote.trim(), cls);
 ```
 
-- [ ] **Step 6: Add the style**
+- [x] **Step 6: Add the style**
 
 In `styles.css`, after the `.sn-critic-arrow` rule:
 
@@ -709,7 +709,7 @@ In `styles.css`, after the `.sn-critic-arrow` rule:
 }
 ```
 
-- [ ] **Step 7: Run the full suite, build and typecheck**
+- [x] **Step 7: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
@@ -724,7 +724,7 @@ Type `Sie {++++}ging.` and `Das {~~kalte~>~~} Licht.` into a note by hand — th
 4. Select the whole paragraph and copy it into a scratch note. The word `insert…` must not come along: CodeMirror reads the clipboard from the document rather than the DOM, so it should not, but a placeholder pasted into a manuscript is a bad way to find out.
 5. Open the drawer and confirm the card for each shows the same placeholder.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/critic-render.ts src/critic-live.test.ts src/review-view.ts styles.css
@@ -758,7 +758,7 @@ The way out when you change your mind. Backspace twice already does it — `cons
 - Consumes: `emptyBodyOf` (Task 3), `criticField`, `unfoldField`, `isRevealed`
 - Produces: `emptyConstructAt(state: EditorState, pos: number): Range | null`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `src/critic-live.test.ts` (add `emptyConstructAt` to the import):
 
@@ -804,12 +804,12 @@ describe('emptyConstructAt — what Escape throws away', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/critic-live.test.ts -t emptyConstructAt`
 Expected: FAIL — `emptyConstructAt` is not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/critic-render.ts`, below `constructToSelectOnDelete`:
 
@@ -837,12 +837,12 @@ export function emptyConstructAt(state: EditorState, pos: number): Range | null 
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest src/critic-live.test.ts -t emptyConstructAt`
 Expected: PASS.
 
-- [ ] **Step 5: Bind the key**
+- [x] **Step 5: Bind the key**
 
 In `src/critic-render.ts`, below `selectRatherThanBreak`:
 
@@ -875,7 +875,7 @@ and add the binding to the existing `Prec.high(keymap.of([…]))` array in `crit
         { key: 'Escape', run: discardEmptyConstruct },
 ```
 
-- [ ] **Step 6: Run the full suite, build and typecheck**
+- [x] **Step 6: Run the full suite, build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
@@ -889,7 +889,7 @@ With `Sie {++++}ging.` typed by hand:
 3. Press Escape with the caret in ordinary prose, with a selection active, and with a modal open. Obsidian's own behaviour must be unchanged in all three — this binding is at `Prec.high` and runs ahead of everything.
 4. From the placeholder, press ⌫ twice instead. The construct should be selected by the first press and gone after the second.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/critic-render.ts src/critic-live.test.ts
@@ -918,7 +918,7 @@ EOF
 - Consumes: `suggestChange` (Task 1)
 - Produces: the `suggest-change` command. `suggest-insertion` and `suggest-replacement` cease to exist.
 
-- [ ] **Step 1: Replace the two commands**
+- [x] **Step 1: Replace the two commands**
 
 In `src/main.ts`, add `suggestChange` to the `./critic` import. Then replace both the `suggest-insertion` and `suggest-replacement` `addCommand` blocks with one:
 
@@ -949,7 +949,7 @@ In `src/main.ts`, add `suggestChange` to the `./critic` import. Then replace bot
     });
 ```
 
-- [ ] **Step 2: Correct the comment above the suggestion commands**
+- [x] **Step 2: Correct the comment above the suggestion commands**
 
 The block comment above `addSelectionCommand("comment-on-selection", …)` says *"typing 'suggest' in the palette turns up all three suggestion types together"*. There are two now:
 
@@ -959,7 +959,7 @@ The block comment above `addSelectionCommand("comment-on-selection", …)` says 
     // "markup" turns up the whole-note actions.
 ```
 
-- [ ] **Step 3: Rename the menu item**
+- [x] **Step 3: Rename the menu item**
 
 In the `editor-menu` handler, the fourth item wraps a selection in `{++…++}`. That is now the only place that act lives, and its old name reads as the command that no longer exists:
 
@@ -967,7 +967,7 @@ In the `editor-menu` handler, the fourth item wraps a selection in `{++…++}`. 
         wrap("Suggest as addition", "diff", "insertion");
 ```
 
-- [ ] **Step 4: Delete the modal**
+- [x] **Step 4: Delete the modal**
 
 Delete the `MarkupPromptModal` class, `src/main.ts:1180-1227` — from `class MarkupPromptModal extends Modal {` through the closing brace before `class ConfirmModal`. Confirm nothing else references it:
 
@@ -976,7 +976,7 @@ Expected: no output.
 
 **Leave the `obsidian` import alone.** `Modal` still has two subclasses in this file, `RenameModal` at :1112 and `ConfirmModal` at :1230, and `Setting` is used by both of those and by the settings tab.
 
-- [ ] **Step 5: Build and typecheck**
+- [x] **Step 5: Build and typecheck**
 
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
@@ -990,7 +990,7 @@ Expected: all exit 0.
 5. Confirm **Suggest insertion…** and **Suggest replacement…** are gone from the palette and no dialog opens anywhere in the plugin.
 6. Right-click a selection and confirm **Suggest as addition** still wraps it in `{++…++}`.
 
-- [ ] **Step 7: Bring the README in line**
+- [x] **Step 7: Bring the README in line**
 
 Four edits. Keep the existing voice and length.
 
@@ -1006,7 +1006,7 @@ Four edits. Keep the existing voice and length.
 
 4. **Known limitations** — add that a selection containing `~>` or `~~}` cannot become a replacement, since the format has no escape syntax and the construct would break.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/main.ts README.md

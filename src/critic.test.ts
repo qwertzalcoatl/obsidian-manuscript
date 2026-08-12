@@ -745,7 +745,9 @@ describe('suggestChange — what the command writes', () => {
   });
 
   it('puts the caret exactly at the empty body it wrote', () => {
-    for (const selection of ['', 'kalte', 'ein längerer Satzteil']) {
+    // The tilde cases earn their place: 'a~' makes the body read 'a~~>', where
+    // the first ~> is not the one at the obvious index.
+    for (const selection of ['', 'kalte', 'ein längerer Satzteil', 'a~b', 'a~', '~a']) {
       const change = suggestChange(selection);
       if (change === null) throw new Error('expected a change');
       const entry = parseCritic(change.text)[0];
