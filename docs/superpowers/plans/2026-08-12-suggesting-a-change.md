@@ -1028,8 +1028,10 @@ Expected: all exit 0.
 
 - [ ] **Step 6: Verify by hand in Obsidian**
 
-1. **Mode 2.** Put the caret mid-sentence and run **Suggest a change**. The placeholder appears at the caret, the caret is in it, and typing lands inside the construct. The drawer opens without stealing the caret.
-2. **Mode 1.** Select a word and run it. The word goes red and struck through, the arrow follows, the placeholder follows that, and the caret is in it. Type; confirm the drawer's card shows `kalte → fahle`.
+1. [x] **Mode 2.** Put the caret mid-sentence and run **Suggest a change**. The placeholder appears at the caret, the caret is in it, and typing lands inside the construct. The drawer opens without stealing the caret.
+2. [x] **Mode 1.** Select a word and run it. The word goes red and struck through, the arrow follows, the placeholder follows that, and the caret is in it. Type; confirm the drawer's card shows `kalte → fahle`.
+
+**1 and 2 confirmed in Obsidian on 2026-08-12**, after `511b680` — the caret was landing at the end of the construct, where typing went outside the markup. The rest of this list is still open.
 3. **Escape** from either leaves the prose exactly as it was — including Mode 1, where the selected word must come back unmarked.
 4. Select text containing `~>` and run it. The notice appears and nothing is written.
 5. Confirm **Suggest insertion…** and **Suggest replacement…** are gone from the palette and no dialog opens anywhere in the plugin.
