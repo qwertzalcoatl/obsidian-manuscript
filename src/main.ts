@@ -18,7 +18,7 @@ import {
   type Hotkey,
 } from "obsidian";
 import { extractSnippet } from "./text";
-import { parseCritic, renderAccepted, renderRejected } from "./critic";
+import { parseCritic, renderAccepted, renderRejected, suggestChange } from "./critic";
 import {
   criticEditorExtension,
   criticField,
@@ -1177,54 +1177,6 @@ interface MarkupPromptOptions {
 }
 
 /** Asks for the text of a suggestion — the new wording, or what to insert. */
-class MarkupPromptModal extends Modal {
-  constructor(
-    app: App,
-    private opts: MarkupPromptOptions
-  ) {
-    super(app);
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    const { title, context, label, initial, unchanged, onSubmit } = this.opts;
-
-    contentEl.createEl("h3", { text: title });
-    if (context) contentEl.createEl("p", { cls: "sn-replace-original", text: context });
-
-    let value = initial;
-    const submit = () => {
-      this.close();
-      const trimmed = value.trim();
-      if (trimmed && trimmed !== unchanged) onSubmit(trimmed);
-    };
-
-    new Setting(contentEl).setName(label).addText((text) => {
-      text.setValue(initial);
-      text.onChange((v) => {
-        value = v;
-      });
-      window.setTimeout(() => {
-        text.inputEl.focus();
-        text.inputEl.select();
-      }, 10);
-      text.inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          submit();
-        }
-      });
-    });
-
-    new Setting(contentEl)
-      .addButton((btn) => btn.setButtonText("Suggest").setCta().onClick(submit))
-      .addButton((btn) => btn.setButtonText("Cancel").onClick(() => this.close()));
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-  }
-}
 
 /** Replaces window.confirm(), which blocks the renderer. */
 class ConfirmModal extends Modal {
@@ -1370,63 +1322,36 @@ export default class SheetNavigatorPlugin extends Plugin {
     });
 
     // One command per construct the format supports, named so that typing
-    // "suggest" in the palette turns up all three suggestion types together
-    // and "markup" turns up the whole-note actions.
+    // "suggest" in the palette turns up both suggestion commands together and
+    // "markup" turns up the whole-note actions.
     this.addSelectionCommand("comment-on-selection", "Comment on selection", "comment", [
       { modifiers: ["Mod", "Shift"], key: "m" },
     ]);
     this.addSelectionCommand("highlight-selection", "Highlight selection", "highlight");
     this.addSelectionCommand("suggest-deletion", "Suggest deletion", "deletion");
 
-    // The only one that also works without a selection: inserting text is
-    // proposing something that is not there yet, so there may be nothing to
-    // wrap. With a selection it marks what you just wrote as a proposal.
+    // The only command that works without a selection, because that is the
+    // difference between its two modes rather than a special case: with a
+    // selection it proposes a replacement for what you picked, without one an
+    // addition where the caret is. Both write the construct empty and put the
+    // caret inside it — the words are manuscript text, and manuscript text is
+    // typed in the manuscript.
     this.addCommand({
-      id: "suggest-insertion",
-      name: "Suggest insertion…",
+      id: "suggest-change",
+      name: "Suggest a change",
       editorCallback: (editor) => {
-        if (editor.somethingSelected()) {
-          void this.wrapSelection(editor, "insertion");
+        const change = suggestChange(editor.getSelection());
+        if (change === null) {
+          new Notice(
+            "This selection contains ~> or ~~}, which a replacement cannot hold. Shorten it and try again."
+          );
           return;
         }
-        const at = editor.getCursor();
-        new MarkupPromptModal(this.app, {
-          title: "Suggest insertion",
-          label: "Text to insert",
-          initial: "",
-          onSubmit: (text) => {
-            editor.replaceRange(`{++${text}++}`, at);
-            void this.activateReviewView(false);
-          },
-        }).open();
-      },
-    });
 
-    this.addCommand({
-      id: "suggest-replacement",
-      name: "Suggest replacement…",
-      editorCheckCallback: (checking, editor) => {
-        if (!editor.somethingSelected()) return false;
-        if (!checking) {
-          // Captured now, not inside the callback: the modal takes focus, and
-          // re-reading the selection afterwards is how you replace the wrong
-          // range — or nothing at all.
-          const selection = editor.getSelection();
-          const from = editor.getCursor("from");
-          const to = editor.getCursor("to");
-          new MarkupPromptModal(this.app, {
-            title: "Replace with",
-            context: selection,
-            label: "New text",
-            initial: selection,
-            unchanged: selection,
-            onSubmit: (replacement) => {
-              editor.replaceRange(`{~~${selection}~>${replacement}~~}`, from, to);
-              void this.activateReviewView(false);
-            },
-          }).open();
-        }
-        return true;
+        const start = editor.posToOffset(editor.getCursor("from"));
+        editor.replaceSelection(change.text);
+        editor.setCursor(editor.offsetToPos(start + change.caret));
+        void this.activateReviewView(false);
       },
     });
 
@@ -1456,7 +1381,7 @@ export default class SheetNavigatorPlugin extends Plugin {
         wrap("Comment on selection", "message-square-quote", "comment");
         wrap("Highlight selection", "highlighter", "highlight");
         wrap("Suggest deletion", "strikethrough", "deletion");
-        wrap("Suggest insertion", "diff", "insertion");
+        wrap("Suggest as addition", "diff", "insertion");
       })
     );
   }

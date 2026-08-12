@@ -74,6 +74,8 @@ Marked-up prose is prose you edit in place. Click into it and type — the synta
 
 Comments live in the drawer, not in the prose — and they are written there too. A mark carrying one is drawn with a dotted underline; the note itself is on its card, where you click it to write or change it. A comment with no text anchored to it — one Claude left on a line of its own, say — shows in the drawer and the mark count but nowhere on the page.
 
+A change you have started but not written into shows a dashed placeholder where the words go — the only badge the plugin draws, because it is an instruction rather than a piece of your book. Type and it disappears; press `Escape` and the whole construct does.
+
 If a mark ever needs repairing by hand, **Show markup source at cursor** unfolds the one under the caret, braces and all. It folds itself back when you move away. That command is the only thing in the plugin that puts syntax on screen.
 
 ### Working through a pass
@@ -96,19 +98,19 @@ Every construct has a command, so the whole format is reachable from the command
 | Comment on selection — `⌘⇧M` | yes | `{==Text==}`, then the drawer opens with the caret in its note field |
 | Highlight selection | yes | `{==Text==}` |
 | Suggest deletion | yes | `{--Text--}` |
-| Suggest insertion… | no | `{++Text++}` — wraps a selection, or asks what to insert |
-| Suggest replacement… | yes | `{~~alt~>neu~~}` — asks for the new wording |
+| Suggest a change | no | with a selection `{~~alt~>neu~~}`, without one `{++Text++}` — either way you type the new wording in the manuscript |
 | Accept all markup in this note | no | resolves everything, keeping the suggestions |
 | Reject all markup in this note | no | resolves everything, turning them all down |
 | Show markup source at cursor | no | unfolds the mark under the caret for repair |
 | Open review panel | no | — |
 
-The four wrapping commands are also on the editor's right-click menu. Nothing in your note is ever modified unless you invoke one of these.
+The right-click menu carries **Comment on selection**, **Highlight selection**, **Suggest deletion** and **Suggest as addition** — the last of which marks text already written as a proposed addition and has no command of its own, since everywhere else a selection means *here is what I am changing*. Nothing in your note is ever modified unless you invoke one of these.
 
 ### Known limitations
 
 - A mark may wrap across a soft line break but not across a blank line, so there are no multi-paragraph anchors. This also stops a stray `{++` from swallowing the rest of the note when it eventually meets a `++}`.
 - Marks do not nest. `{==a {==b==} c==}` closes at the first `==}`.
+- A selection containing `~>` or `~~}` cannot become a replacement: the format has no escape syntax, so the construct would split in the wrong place or close early. The command says so and writes nothing.
 - A note may run to several lines but cannot hold a blank line or its own `<<}` — CriticMarkup has no escape syntax, so a blank line would end the mark and `<<}` would close it early. Both are defused as the note is written, and what the card shows afterwards is what was stored.
 - **Accept all** / **Reject all** rewrite everything between the first and last mark in one edit, so the cursor can move if it was sitting between them. Deciding marks one at a time leaves the cursor exactly where it was.
 - `{--alt--}{++neu++}` is read as two separate marks, not as one substitution. Use `{~~alt~>neu~~}` for that.
