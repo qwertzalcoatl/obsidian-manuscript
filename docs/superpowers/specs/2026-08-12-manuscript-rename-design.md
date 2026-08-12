@@ -85,15 +85,36 @@ the record. They keep saying *Sheet Navigator*, and that is correct.
 
 ## What this costs the author's own vault
 
-Obsidian derives the plugin's data directory from its id. After the rename:
+*Revised during implementation: the install turned out to be a symlink, which
+changes the cost.*
+
+The plugin is not copied into the vault. It is linked:
 
 ```
-<vault>/.obsidian/plugins/sheet-navigator/   →  .../plugins/manuscript/
+/Users/abrell/Documents/Die fünfte Gewalt/.obsidian/plugins/sheet-navigator
+  →  /Users/abrell/Developer/sheet-navigator
 ```
 
-Rename that folder and `data.json` travels with it, settings intact. Skip it and
-Obsidian shows two plugins and the new one starts on defaults. Hand-set hotkeys
-detach either way, because they are keyed on the plugin id.
+`data.json` and `main.js` are gitignored and live in the repo root, so Obsidian
+reaches them *through* the link. **Settings therefore survive the rename by
+themselves** — there is no data directory to migrate, which is what the first
+draft of this spec got wrong.
+
+What breaks instead is the pair of names that must agree with the manifest:
+
+| What | Now | Must become |
+|---|---|---|
+| Link name | `plugins/sheet-navigator` | `plugins/manuscript` |
+| `.obsidian/community-plugins.json` | `["sheet-navigator"]` | `["manuscript"]` |
+
+Until both are changed, the vault holds a folder called `sheet-navigator` whose
+manifest declares `id: manuscript`, and an enabled-list entry pointing at an id
+no manifest claims.
+
+The ordering constraint: renaming the working directory invalidates the link's
+target, so the link has to be rebuilt after the move, not before.
+
+Hand-set hotkeys detach regardless, being keyed on the plugin id.
 
 ## Verification
 
