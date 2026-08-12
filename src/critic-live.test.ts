@@ -16,6 +16,7 @@ import {
   criticDecorations,
   criticField,
   emptyBodyOf,
+  emptyConstructAt,
   flashEffect,
   flashField,
   flashRangesFor,
@@ -737,5 +738,45 @@ describe('Live Preview decorations — the placeholder', () => {
     expect(paintUnfolded('Sie {++++}ging.', 7).map((d) => d.cls)).not.toContain(
       'sn-critic-placeholder'
     );
+  });
+});
+
+describe('emptyConstructAt — what Escape throws away', () => {
+  const at = (doc: string, pos: number) =>
+    emptyConstructAt(
+      EditorState.create({ doc, extensions: [unfoldField, criticField] }),
+      pos
+    );
+
+  it('finds an empty insertion from its body', () => {
+    expect(at('Sie {++++}ging.', 7)).toEqual({ from: 4, to: 10 });
+  });
+
+  it('finds an empty substitution from its replacement', () => {
+    expect(at('Das {~~kalte~>~~} Licht.', 14)).toEqual({ from: 4, to: 17 });
+  });
+
+  it('finds nothing anywhere else in the same construct', () => {
+    // Every other offset in it is inside a hidden marker, and those are
+    // atomic — the caret cannot be there to press Escape in the first place.
+    expect(at('Sie {++++}ging.', 4)).toBeNull();
+    expect(at('Sie {++++}ging.', 10)).toBeNull();
+  });
+
+  it('finds nothing once the construct has text in it', () => {
+    expect(at('Sie {++leise ++}ging.', 7)).toBeNull();
+  });
+
+  it('finds nothing in open prose', () => {
+    expect(at('Sie ging fort.', 4)).toBeNull();
+  });
+
+  it('leaves a construct showing its raw source alone', () => {
+    const revealed = EditorState.create({
+      doc: 'Sie {++++}ging.',
+      extensions: [unfoldField, criticField],
+      selection: { anchor: 7 },
+    }).update({ effects: unfoldEffect.of({ from: 4, to: 10 }) }).state;
+    expect(emptyConstructAt(revealed, 7)).toBeNull();
   });
 });

@@ -446,6 +446,28 @@ export function constructToSelectOnDelete(
   return null;
 }
 
+/**
+ * The empty construct the caret is sitting in, if any.
+ *
+ * `pos` has to be the empty body itself, which is the only position in such a
+ * construct the caret can occupy — everything else in it is inside a hidden
+ * marker, and hidden markers are atomic.
+ *
+ * Null for a construct showing its raw source: there the braces are on screen
+ * and editing them by hand is the point, Escape included.
+ */
+export function emptyConstructAt(state: EditorState, pos: number): Range | null {
+  const unfold = state.field(unfoldField);
+
+  for (const entry of state.field(criticField)) {
+    if (isRevealed(unfold, entry)) continue;
+    const empty = emptyBodyOf(entry);
+    if (empty !== null && empty.from === pos) return { from: entry.from, to: entry.to };
+  }
+
+  return null;
+}
+
 // ─── Card-click flash ───
 
 /**
@@ -536,6 +558,27 @@ function selectRatherThanBreak(view: EditorView, forward: boolean): boolean {
 }
 
 /**
+ * Throws away a construct you started and did not write into.
+ *
+ * Returns false everywhere else, which is nearly everywhere — Escape belongs to
+ * Obsidian, and the one position this claims it in is a placeholder the caret
+ * only reaches by having just asked for one.
+ */
+function discardEmptyConstruct(view: EditorView): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+
+  const hit = emptyConstructAt(view.state, sel.head);
+  if (hit === null) return false;
+
+  view.dispatch({
+    changes: { from: hit.from, to: hit.to, insert: '' },
+    selection: { anchor: hit.from },
+  });
+  return true;
+}
+
+/**
  * @param onReveal Called with an entry's start offset when the reader clicks
  *   anywhere inside it. Handling this at the view level rather than per span
  *   covers every construct with one listener, and returning false keeps the
@@ -569,6 +612,11 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
       keymap.of([
         { key: 'Backspace', run: (view) => selectRatherThanBreak(view, false) },
         { key: 'Delete', run: (view) => selectRatherThanBreak(view, true) },
+        // Backspace twice already does this — the probe hits the opening
+        // marker from the placeholder and selects the whole construct — but
+        // changing your mind should not take two presses of a key that means
+        // delete.
+        { key: 'Escape', run: discardEmptyConstruct },
       ])
     ),
     flashField,
