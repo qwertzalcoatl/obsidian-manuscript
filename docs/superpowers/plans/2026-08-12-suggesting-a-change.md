@@ -691,23 +691,32 @@ An empty insertion is an entry like any other, so the drawer gives it a card —
 In `styles.css`, after the `.sn-critic-arrow` rule:
 
 ```css
-/* Where the words go, before there are any. The one badge in the plugin: the
-   rule against them is about how an edit is shown, and this is not an edit
-   being shown but an instruction — one that stays where it is if you click
-   away, so it has to be unmistakably not manuscript. Dashed because nothing
-   about it is settled yet, and inline-block so no decoration on a surrounding
-   construct paints through it. */
+/* Where the words go, before there are any. A hint that gives way, not a field
+   you fill: it had a dashed box once, and the box was the problem — edges made
+   it read as an object sitting in the sentence, so typing felt like destroying
+   something rather than writing. Green italic against the manuscript's own face
+   says this is not manuscript, which is all it has to say.
+
+   inline-block so no decoration on a surrounding construct paints through it,
+   and the padding is breathing room against the next word — both of them gone
+   on the first keystroke anyway. */
 .sn-critic-placeholder {
   display: inline-block;
-  padding: 0 0.35em;
-  border: 1px dashed color-mix(in srgb, var(--color-green, #4caf50) 55%, transparent);
-  border-radius: 3px;
+  padding: 0 0.2em;
   color: color-mix(in srgb, var(--color-green, #4caf50) 85%, var(--text-normal));
   font-style: italic;
   font-size: 0.85em;
   user-select: none;
 }
 ```
+
+**Revised after seeing it.** The first version had a dashed border and it read as
+an object being destroyed on the first keystroke. Four variants were rendered
+side by side in the harness — no border, a frame arriving as you write, a box
+persisting from hint to words — and the no-border one won. The finding that
+decided it: a widget is atomic, so the caret can never be inside its box, and a
+frame on the body collapses while the body has no width; "you write inside the
+placeholder" is only reachable after the first keystroke.
 
 - [x] **Step 7: Run the full suite, build and typecheck**
 

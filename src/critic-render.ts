@@ -117,11 +117,15 @@ function isArrowMarker(entry: Entry, marker: Range): boolean {
 /**
  * Where the words go, before there are any.
  *
- * The one badge in the plugin, and the exception is narrow: the rule against
- * them at the top of this file is about how an edit is shown, and this is not
- * an edit being shown. It is an instruction to the writer — one that stays put
- * if you click away from it, so it has to be impossible to mistake for the
- * manuscript.
+ * A hint that gives way rather than a field you fill. It had a dashed box at
+ * first, and the box was the mistake: edges made it read as an object sitting
+ * in the sentence, so typing felt like destroying something. Green italic
+ * against the manuscript's own face carries the whole message.
+ *
+ * The caret cannot be inside it however it is styled — a widget is one atomic
+ * element, so the caret always renders beside it, and a frame drawn on the body
+ * collapses to nothing while the body has no width. Rendered to find that out
+ * rather than reasoned about.
  */
 class PlaceholderWidget extends WidgetType {
   readonly cls = 'sn-critic-placeholder';

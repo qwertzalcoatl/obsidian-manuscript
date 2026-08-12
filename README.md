@@ -74,7 +74,7 @@ Marked-up prose is prose you edit in place. Click into it and type — the synta
 
 Comments live in the drawer, not in the prose — and they are written there too. A mark carrying one is drawn with a dotted underline; the note itself is on its card, where you click it to write or change it. A comment with no text anchored to it — one Claude left on a line of its own, say — shows in the drawer and the mark count but nowhere on the page.
 
-A change you have started but not written into shows a dashed placeholder where the words go — the only badge the plugin draws, because it is an instruction rather than a piece of your book. Type and it disappears; press `Escape` and the whole construct does.
+A change you have started but not written into shows a faint green *insert…* where the words go. Type and it gives way; press `Escape` and the whole construct does.
 
 If a mark ever needs repairing by hand, **Show markup source at cursor** unfolds the one under the caret, braces and all. It folds itself back when you move away. That command is the only thing in the plugin that puts syntax on screen.
 

@@ -63,20 +63,23 @@ function of the parse, read the same way `hiddenRanges` reads it. The first
 keystroke makes the body non-empty, the widget's range disappears from the next
 decoration set, and the ordinary insertion mark takes over.
 
-It renders **bracketed and dashed** rather than as plain faint words, and this is
-the one place in the plugin where a badge is right. The module docstring's rule —
-*"the change is shown as the change … rather than as a labelled badge"* — is
-about how an edit is displayed. A placeholder is not an edit being displayed; it
-is an instruction to the writer, and it has to be impossible to mistake for the
-manuscript, because it can be left behind:
+It renders as **green italic ghost text with no box**, which took one revision to
+get to. The first version drew a dashed border, and the border was the mistake:
+edges made it read as an object sitting in the sentence, so typing felt like
+destroying something rather than writing. The module docstring's rule against
+badges turns out to apply here after all.
 
 ```
-Sie ‹insert…› ging.
-    ‵────────′  dashed, green, italic, smaller
+Sie insert… ging.
+    ‾‾‾‾‾‾‾  green, italic, smaller — and nothing else
 ```
 
-The widget's text is exactly `insert…`. The brackets in every diagram here are
-the dashed border, not characters — nothing renders a guillemet.
+**The caret cannot be inside it, however it is styled.** A widget is one atomic
+element, so the caret always renders beside it; and a frame drawn on the body
+collapses to nothing while the body has no width. So "the placeholder lives in a
+box and you write in the box" is only reachable after the first keystroke, which
+is what settles the question against a box at all. Established by rendering the
+real decorations in a bare `EditorView`, not by reading the library.
 
 Reading view gets none of it. A reader has nothing to type into, and an empty
 construct there should stay what it is: nothing.
