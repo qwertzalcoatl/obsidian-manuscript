@@ -39,7 +39,7 @@ describe('renderCriticMarkup — markers disappear, text survives', () => {
 
   it('renders a substitution as struck old followed by new', () => {
     const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
-    expect(root.textContent).toBe('Das kaltefahle Licht.');
+    expect(root.textContent).toBe('Das kalte→fahle Licht.');
     expect(root.querySelector('.sn-critic-deletion')?.textContent).toBe('kalte');
     expect(root.querySelector('.sn-critic-insertion')?.textContent).toBe('fahle');
   });
@@ -92,7 +92,7 @@ describe('renderCriticMarkup — constructs spanning several DOM nodes', () => {
 describe('renderCriticMarkup — several entries at once', () => {
   it('renders three constructs on one line without disturbing each other', () => {
     const root = render('<p>{--a--} und {++b++} und {~~c~>d~~}</p>');
-    expect(root.textContent).toBe('a und b und cd');
+    expect(root.textContent).toBe('a und b und c→d');
   });
 
   it('renders constructs in separate paragraphs', () => {
@@ -158,16 +158,33 @@ describe('renderCriticMarkup — a construct carrying a note', () => {
 });
 
 describe('renderCriticMarkup — the substitution separator', () => {
-  it('gives the replacement the hook the arrow is drawn from', () => {
+  it('marks the replacement half of a substitution', () => {
     const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
-    const replacement = root.querySelector('.sn-critic-replacement');
-    expect(replacement?.textContent).toBe('fahle');
-    expect(replacement?.classList.contains('sn-critic-insertion')).toBe(true);
+    const halves = root.querySelectorAll('.sn-critic-insertion');
+    expect(halves).toHaveLength(1);
+    expect(halves[0].textContent).toBe('fahle');
   });
 
-  it('leaves a plain insertion without it, so no arrow is drawn', () => {
+  it('renders the arrow as its own element between the halves', () => {
+    const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
+    expect(root.querySelector('.sn-critic-arrow')?.textContent).toBe('→');
+    expect(root.textContent).toBe('Das kalte→fahle Licht.');
+  });
+
+  it('renders the arrow when the replacement is empty', () => {
+    const root = render('<p>Das {~~kalte~>~~} Licht.</p>');
+    expect(root.querySelector('.sn-critic-arrow')?.textContent).toBe('→');
+  });
+
+  it('draws no placeholder — a reader has nothing to type into', () => {
+    const root = render('<p>Sie {++++}ging.</p>');
+    expect(root.querySelector('.sn-critic-placeholder')).toBeNull();
+    expect(root.textContent).toBe('Sie ging.');
+  });
+
+  it('leaves a plain insertion without an arrow', () => {
     const root = render('<p>Sie {++leise ++}ging.</p>');
-    expect(root.querySelector('.sn-critic-replacement')).toBeNull();
+    expect(root.querySelector('.sn-critic-arrow')).toBeNull();
     expect(root.querySelector('.sn-critic-insertion')?.textContent).toBe('leise ');
   });
 });

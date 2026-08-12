@@ -28,9 +28,11 @@ import { parseCritic, suggestChange } from './critic';
 interface Painted {
   from: number;
   to: number;
-  /** The class a mark applies, or '' for a hidden/replaced range. */
+  /** The class a mark or a widget applies, or '' for a hidden range. */
   cls: string;
   text: string;
+  /** What the reader sees in its place, or null where the source text stays. */
+  renders: string | null;
 }
 
 /** Every decoration the renderer produces for `doc`, with an optional cursor. */
@@ -44,6 +46,32 @@ function paint(doc: string, cursor?: number): Painted[] {
   return painted(state, doc);
 }
 
+/**
+ * A decoration's class, whether it marks text or replaces it with a widget.
+ *
+ * A widget carries no spec.class, so without this it would read as an empty
+ * class — indistinguishable from a hidden marker, which is exactly what the
+ * arrow stopped being.
+ */
+function classOf(value: { spec: unknown }): string {
+  const spec = value.spec as { class?: string; widget?: { cls?: string } };
+  return spec.class ?? spec.widget?.cls ?? '';
+}
+
+/**
+ * What a decoration puts on screen in place of the source it covers, or null
+ * where the source survives.
+ *
+ * A mark leaves the text alone. Everything else replaces it — with nothing, or
+ * with whatever its widget renders. Reading the widget's own `text` rather than
+ * keeping a table here means the arrow can change without this knowing.
+ */
+function rendersAs(value: { spec: unknown }): string | null {
+  const spec = value.spec as { class?: string; widget?: { text?: string } };
+  if (spec.class !== undefined) return null;
+  return spec.widget?.text ?? '';
+}
+
 /** Reads a state's decorations out as plain data. */
 function painted(state: EditorState, doc: string): Painted[] {
   const out: Painted[] = [];
@@ -51,8 +79,9 @@ function painted(state: EditorState, doc: string): Painted[] {
     out.push({
       from,
       to,
-      cls: (value.spec.class as string) ?? '',
+      cls: classOf(value),
       text: doc.slice(from, to),
+      renders: rendersAs(value),
     });
   });
   return out;
@@ -75,13 +104,14 @@ function paintUnfolded(doc: string, at: number): Painted[] {
   return painted(state, doc);
 }
 
-/** Text as the reader sees it: hidden and replaced ranges taken out. */
+/** Text as the reader sees it, with every replaced range standing in for itself. */
 function visible(doc: string, cursor?: number): string {
-  const removed = paint(doc, cursor).filter((d) => d.cls === '');
+  const replaced = paint(doc, cursor).filter((d) => d.renders !== null);
   let out = '';
   let at = 0;
-  for (const r of removed.sort((a, b) => a.from - b.from)) {
+  for (const r of replaced.sort((a, b) => a.from - b.from)) {
     out += doc.slice(at, r.from);
+    out += r.renders;
     at = Math.max(at, r.to);
   }
   return out + doc.slice(at);
@@ -102,16 +132,15 @@ describe('Live Preview decorations — markers hidden, text styled', () => {
     );
   });
 
-  it('shows both halves of a substitution and hides the arrow', () => {
+  it('shows both halves of a substitution and draws the arrow between them', () => {
     const doc = 'Das {~~kalte~>fahle~~} Licht.';
-    expect(visible(doc)).toBe('Das kaltefahle Licht.');
+    expect(visible(doc)).toBe('Das kalte→fahle Licht.');
     const marks = paint(doc);
     expect(marks).toContainEqual(
       expect.objectContaining({ cls: 'sn-critic-deletion', text: 'kalte' })
     );
-    // Two classes: the second is what draws the → the hidden arrow left behind.
     expect(marks).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-insertion sn-critic-replacement', text: 'fahle' })
+      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'fahle' })
     );
   });
 
@@ -159,7 +188,7 @@ describe('Live Preview decorations — the caret never reveals markup', () => {
   });
 
   it('keeps a substitution folded with the cursor in the replacement', () => {
-    expect(visible('Das {~~kalte~>fahle~~} Licht.', 15)).toBe('Das kaltefahle Licht.');
+    expect(visible('Das {~~kalte~>fahle~~} Licht.', 15)).toBe('Das kalte→fahle Licht.');
   });
 
   it('keeps an annotation folded with the cursor in the anchored text', () => {
@@ -190,7 +219,7 @@ describe('Live Preview decorations — the unfold effect reveals markup', () => 
 
   it('shows the raw source of the unfolded construct', () => {
     const hidden = paintUnfolded(doc, 8)
-      .filter((d) => d.cls === '')
+      .filter((d) => d.renders !== null)
       .map((d) => d.text);
     expect(hidden).toEqual([]);
   });
@@ -210,7 +239,7 @@ describe('Live Preview decorations — the unfold effect reveals markup', () => 
   it('leaves every other construct folded', () => {
     const two = 'Sie {++leise ++}ging {--fort--}.';
     const hidden = paintUnfolded(two, 8)
-      .filter((d) => d.cls === '')
+      .filter((d) => d.renders !== null)
       .map((d) => d.text);
     expect(hidden).toEqual(['{--', '--}']);
   });
@@ -281,8 +310,9 @@ describe('Live Preview decorations — flash after a card click', () => {
       out.push({
         from,
         to,
-        cls: (value.spec.class as string) ?? '',
+        cls: classOf(value),
         text: state.doc.sliceString(from, to),
+        renders: rendersAs(value),
       });
     });
     return out;
@@ -625,5 +655,26 @@ describe('suggestChange — the caret lands somewhere it can rest', () => {
       { from: 4, to: 7 },
       { from: 7, to: 10 },
     ]);
+  });
+});
+
+describe('Live Preview decorations — the substitution arrow', () => {
+  it('replaces the ~> marker rather than hiding it', () => {
+    expect(paint('Das {~~kalte~>fahle~~} Licht.')).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-arrow', text: '~>' })
+    );
+  });
+
+  it('draws even when the replacement is still empty', () => {
+    // The case the whole change is for: a zero-width mark is dropped, so
+    // generated content hung off the replacement would vanish exactly while
+    // the replacement is being written.
+    expect(paint('Das {~~kalte~>~~} Licht.')).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-arrow', text: '~>' })
+    );
+  });
+
+  it('leaves an insertion alone, which has no arrow', () => {
+    expect(paint('Sie {++leise ++}ging.').map((d) => d.cls)).not.toContain('sn-critic-arrow');
   });
 });

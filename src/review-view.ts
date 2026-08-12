@@ -413,7 +413,7 @@ export class ReviewView extends ItemView {
 
     if (entry.kind === 'substitution') {
       span(entry.quote.trim(), 'sn-critic-deletion');
-      el.createSpan({ cls: 'sheet-review-arrow' }).setText('→');
+      el.createSpan({ cls: 'sn-critic-arrow' }).setText('→');
       span((entry.replacement ?? '').trim(), 'sn-critic-insertion');
       return;
     }

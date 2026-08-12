@@ -20,7 +20,13 @@ import {
   type EditorState,
   type Extension,
 } from '@codemirror/state';
-import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
+import {
+  Decoration,
+  EditorView,
+  WidgetType,
+  keymap,
+  type DecorationSet,
+} from '@codemirror/view';
 import { parseCritic, type Entry, type Range } from './critic';
 
 /** Cheap reject for the overwhelming majority of notes, which carry no markup. */
@@ -63,6 +69,50 @@ const nonEmpty = (r: Range | null): r is Range => r !== null && r.to > r.from;
 // ─── Live Preview ───
 
 const HIDDEN = Decoration.replace({});
+
+/**
+ * The `~>` between a substitution's halves, drawn as its own element.
+ *
+ * A widget rather than the CSS ::before it replaces, for two reasons. An empty
+ * replacement has a zero-width mark, which CodeMirror drops — so generated
+ * content hung off it disappears exactly when the arrow matters most, while the
+ * replacement is still being typed. And generated content sits inside the
+ * insertion's box, where it wears the green underline whatever it declares: a
+ * border spans its generated content, and a descendant cannot cancel a
+ * decoration its ancestor draws, so neither reset the old rule carried did
+ * anything at all.
+ *
+ * The drawer card has always built it this way, as a sibling span.
+ */
+class ArrowWidget extends WidgetType {
+  readonly cls = 'sn-critic-arrow';
+  readonly text = '→';
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.className = this.cls;
+    el.textContent = this.text;
+    return el;
+  }
+
+  // Every arrow is the same arrow, so CodeMirror never has to rebuild one.
+  eq(): boolean {
+    return true;
+  }
+}
+
+const ARROW = Decoration.replace({ widget: new ArrowWidget() });
+
+/**
+ * Whether `marker` is the arrow of a substitution rather than one of its braces.
+ *
+ * Identified by position rather than by index into `spans.markers`: the arrow is
+ * the one that begins where the quoted half ends, which stays true even when
+ * that half is itself empty.
+ */
+function isArrowMarker(entry: Entry, marker: Range): boolean {
+  return entry.kind === 'substitution' && marker.from === entry.spans.quote?.to;
+}
 
 // ─── Repair mode ───
 
@@ -181,16 +231,21 @@ export function criticDecorations(state: EditorState): DecorationSet {
     }
 
     mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
-    // The second class is the separator's hook: with the arrow hidden, the two
-    // halves would otherwise run together as "kaltefahle". Carried on the
-    // replacement itself rather than inferred from the construct, so Reading
-    // view — which has no construct-wide wrapper — can use the same rule.
-    mark(entry.spans.replacement, 'sn-critic-insertion sn-critic-replacement');
+    mark(entry.spans.replacement, 'sn-critic-insertion');
 
     if (revealed) continue;
 
     for (const marker of entry.spans.markers) {
-      if (nonEmpty(marker)) ranges.push({ from: marker.from, to: marker.to, value: HIDDEN });
+      if (!nonEmpty(marker)) continue;
+      // Every marker comes off the screen; the substitution's arrow is the one
+      // that leaves something behind. Without it the two halves run together
+      // as "kaltefahle", and with the replacement still empty there would be
+      // nothing at all between them.
+      ranges.push({
+        from: marker.from,
+        to: marker.to,
+        value: isArrowMarker(entry, marker) ? ARROW : HIDDEN,
+      });
     }
     if (nonEmpty(entry.spans.comment)) {
       const line = lineCollapseRange(state, entry);
@@ -547,17 +602,34 @@ function slices(spans: NodeSpan[], from: number, to: number) {
 
 type Op =
   | { from: number; to: number; op: 'hide' }
-  | { from: number; to: number; op: 'wrap'; cls: string; label: string };
+  | { from: number; to: number; op: 'wrap'; cls: string; label: string }
+  | { from: number; to: number; op: 'text'; text: string; cls: string };
 
 function applyOps(spans: NodeSpan[], ops: Op[]): void {
-  // Right to left, so splitting a node never moves the ranges still to come.
   for (const op of [...ops].sort((a, b) => b.from - a.from)) {
-    for (const slice of slices(spans, op.from, op.to).reverse()) {
+    const parts = slices(spans, op.from, op.to);
+    // Right to left, so splitting a node never moves the ranges still to come.
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const slice = parts[i];
       if (slice.end <= slice.start) continue;
       const piece = isolate(slice.node, slice.start, slice.end);
 
       if (op.op === 'hide') {
         piece.remove();
+        continue;
+      }
+
+      if (op.op === 'text') {
+        // A marker split across text nodes would otherwise get one element per
+        // node. Only the first slice becomes it; the rest simply go.
+        if (i > 0) {
+          piece.remove();
+          continue;
+        }
+        const el = document.createElement('span');
+        el.className = op.cls;
+        el.textContent = op.text;
+        piece.replaceWith(el);
         continue;
       }
 
@@ -595,7 +667,12 @@ export function renderCriticMarkup(root: HTMLElement): void {
     for (const entry of parseCritic(text)) {
       const label = labelFor(entry);
       for (const marker of entry.spans.markers) {
-        if (nonEmpty(marker)) ops.push({ ...marker, op: 'hide' });
+        if (!nonEmpty(marker)) continue;
+        if (isArrowMarker(entry, marker)) {
+          ops.push({ ...marker, op: 'text', text: '→', cls: 'sn-critic-arrow' });
+        } else {
+          ops.push({ ...marker, op: 'hide' });
+        }
       }
       // Here the class rides the quote rather than the whole construct: the
       // markers around it are removed from the DOM outright, so a wrapper
@@ -612,7 +689,7 @@ export function renderCriticMarkup(root: HTMLElement): void {
         ops.push({
           ...entry.spans.replacement,
           op: 'wrap',
-          cls: 'sn-critic-insertion sn-critic-replacement',
+          cls: 'sn-critic-insertion',
           label,
         });
       }
