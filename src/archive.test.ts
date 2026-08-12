@@ -3,6 +3,7 @@ import {
   archivePathFor,
   expandToMarks,
   newArchive,
+  originLine,
   originLink,
   timestamp,
 } from './archive';
@@ -167,5 +168,35 @@ describe('expandToMarks', () => {
     const content = 'Er ging {++schnell++} nach Hause.';
     const start = content.indexOf('{++');
     expect(expandToMarks(content, 0, start)).toEqual({ from: 0, to: start });
+  });
+});
+
+describe('originLine', () => {
+  it('renders the frontmatter line an archive is recognised by', () => {
+    expect(originLine('[[Kapitel 3/3 – Die Nachricht]]')).toBe(
+      'origin: "[[Kapitel 3/3 – Die Nachricht]]"'
+    );
+  });
+
+  it('escapes quotes so the YAML stays valid', () => {
+    expect(originLine('[[Er sagte "nein"]]')).toBe('origin: "[[Er sagte \\"nein\\"]]"');
+  });
+
+  it('is exactly what newArchive writes', () => {
+    // main.ts matches this line against a file's raw text to identify an
+    // archive metadataCache has not indexed yet. The two must not drift.
+    expect(newArchive('[[K]]', '2026-08-12 14:32', 'x')).toContain(originLine('[[K]]'));
+  });
+});
+
+describe('archivePathFor, on a root spelled with slashes', () => {
+  it('tolerates a leading slash', () => {
+    // Free-text setting: `/Archiv` is as likely a spelling as `Archiv`, and a
+    // leading slash would make every path comparison in main.ts miss.
+    expect(archivePathFor('Kapitel 3/3.md', '/Archiv')).toBe('Archiv/Kapitel 3/3.md');
+  });
+
+  it('tolerates slashes at both ends', () => {
+    expect(archivePathFor('Kapitel 3/3.md', '/Archiv/')).toBe('Archiv/Kapitel 3/3.md');
   });
 });

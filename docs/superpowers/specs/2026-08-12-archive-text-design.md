@@ -87,6 +87,16 @@ file still sits under its old name, so a derived path finds nothing and creates
 a duplicate — exactly the failure the wikilink was chosen to prevent. The
 derived path is used for **creation only**.
 
+`metadataCache` is populated asynchronously, so an archive created seconds ago
+is invisible to that scan — and cutting several paragraphs in a row is the
+ordinary way to use this feature. When the scan finds nothing, the mirrored path
+is checked directly and the file's **raw text** matched against the exact
+`origin:` line `newArchive` writes. Matching the text rather than the cache is
+what makes it work during that window; matching the exact line rather than mere
+existence is what stops another note's cuts being appended into a stale archive
+left behind by a note that once had this name. A file at the path that names a
+different origin is refused with a Notice rather than written to.
+
 Self-healing — renaming a drifted archive file back into place — was considered
 and declined. It adds a file move to a feature whose promise is that it only
 appends, and the stale name costs nothing: the archive is reached through the
@@ -213,6 +223,8 @@ undoing in a document they have open, not the plugin removing anything.
 | The note is itself in the archive | Refused. Archiving the archive has no meaning |
 | Archive folder does not exist | Created on first use, one level at a time |
 | Two archive files claim one origin | First in path order wins, deterministically. Only reachable by hand-editing frontmatter |
+| A second cut before the cache catches up | The mirrored path is read directly and matched on its `origin:` line, so the entry appends instead of failing to create |
+| A file at the mirrored path names another origin | Refused with a Notice. Appending one note's cuts into another's archive is worse than doing nothing |
 | The archive is open with unsaved edits | Appended through that editor rather than to disk, so neither version is lost |
 | Archive write fails | Notice carries the error; the chapter is untouched |
 | The note changed mid-write | Archived but not removed, and the Notice says so. A visible duplicate beats an invisible deletion |
@@ -236,6 +248,10 @@ undoing in a document they have open, not the plugin removing anything.
   is not part of this.
 - Markup inside an archived passage travels verbatim. The archive is a record of
   what was cut, not a resolved version of it.
+- **A selection that includes the note's own frontmatter archives it and takes
+  it out of the note.** Select-all-then-archive is the way to hit this. The
+  plugin does not treat frontmatter as special, and guarding it would mean
+  guessing at which lines the writer meant to keep.
 
 ## Verification
 

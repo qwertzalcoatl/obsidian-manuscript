@@ -41,7 +41,9 @@ export function expandToMarks(content: string, from: number, to: number): Range 
  * `Kapitel 9/3.md` in the same place.
  */
 export function archivePathFor(originPath: string, archiveRoot: string): string {
-  const root = archiveRoot.replace(/\/+$/, '');
+  // The setting is free text, so `/Archiv`, `Archiv/` and `Archiv` all arrive.
+  // A stray leading slash would make every path comparison in main.ts miss.
+  const root = archiveRoot.replace(/^\/+/, '').replace(/\/+$/, '');
   return root ? `${root}/${originPath}` : originPath;
 }
 
@@ -63,15 +65,24 @@ function entry(stamp: string, text: string): string {
 }
 
 /**
- * The body of an archive file that does not exist yet.
+ * The frontmatter line an archive file is identified by.
  *
- * The link is written as a double-quoted YAML scalar, so a title containing a
- * quote has to be escaped — otherwise the frontmatter block is malformed and
- * Obsidian reads no `origin` at all, which would orphan the file silently.
+ * A double-quoted YAML scalar, so a title containing a quote has to be escaped
+ * — otherwise the block is malformed, Obsidian reads no `origin` at all, and
+ * the file is silently orphaned.
+ *
+ * Its own function because main.ts matches this line against a file's raw text
+ * to recognise an archive `metadataCache` has not indexed yet. Written twice,
+ * the two spellings would eventually disagree.
  */
-export function newArchive(link: string, stamp: string, text: string): string {
+export function originLine(link: string): string {
   const escaped = link.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `---\norigin: "${escaped}"\n---\n\n${entry(stamp, text)}`;
+  return `origin: "${escaped}"`;
+}
+
+/** The body of an archive file that does not exist yet. */
+export function newArchive(link: string, stamp: string, text: string): string {
+  return `---\n${originLine(link)}\n---\n\n${entry(stamp, text)}`;
 }
 
 /**

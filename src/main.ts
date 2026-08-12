@@ -14,6 +14,7 @@ import {
   MarkdownView,
   Editor,
   Notice,
+  normalizePath,
   setIcon,
   type Hotkey,
 } from "obsidian";
@@ -23,6 +24,7 @@ import {
   archivePathFor,
   expandToMarks,
   newArchive,
+  originLine,
   originLink,
   timestamp,
 } from "./archive";
@@ -1325,7 +1327,12 @@ export default class ManuscriptPlugin extends Plugin {
     const origin = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!origin) return;
 
-    const root = this.settings.archiveFolder.trim().replace(/\/+$/, "");
+    // Free-text setting: `/Archiv`, `Archiv/` and `Archiv` all have to land on
+    // the same root, or the guard below and every path comparison silently miss.
+    const root = normalizePath(this.settings.archiveFolder.trim()).replace(
+      /^\/+|\/+$/g,
+      ""
+    );
     if (!root) {
       new Notice("Set an archive folder in Settings → Manuscript first.");
       return;
@@ -1348,21 +1355,23 @@ export default class ManuscriptPlugin extends Plugin {
     }
 
     const stamp = timestamp(new Date());
+    const link = originLink(origin.path);
+    const path = archivePathFor(origin.path, root);
     let target: TFile;
     try {
-      const existing = this.findArchiveFor(origin, root);
+      const existing =
+        this.findArchiveFor(origin, root) ?? (await this.uncachedArchiveAt(path, link));
       if (existing) {
         await this.appendToArchive(existing, stamp, text);
         target = existing;
+      } else if (this.app.vault.getAbstractFileByPath(path)) {
+        new Notice(`Manuscript: ${path} exists but belongs to another note.`);
+        return;
       } else {
-        const path = archivePathFor(origin.path, root);
         await this.ensureFolder(parentOf(path));
         // The returned handle is kept rather than looked up again:
         // metadataCache updates asynchronously and does not know this file yet.
-        target = await this.app.vault.create(
-          path,
-          newArchive(originLink(origin.path), stamp, text)
-        );
+        target = await this.app.vault.create(path, newArchive(link, stamp, text));
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -1413,6 +1422,27 @@ export default class ManuscriptPlugin extends Plugin {
       }
     }
     return null;
+  }
+
+  /**
+   * The archive at the mirrored path, when its own text names this origin.
+   *
+   * `findArchiveFor` reads `metadataCache`, which is populated asynchronously —
+   * so an archive created seconds ago is invisible to it, and archiving a
+   * second paragraph from the same chapter would derive the same path and hit
+   * "file already exists". Cutting several paragraphs in a row is the ordinary
+   * way to use this, so that window is not an edge case.
+   *
+   * The raw text is matched rather than the cache, and against the exact line
+   * `newArchive` writes: a file at this path could be a stale archive left by a
+   * note that used to have this name, and appending another note's cuts into it
+   * would be worse than refusing.
+   */
+  private async uncachedArchiveAt(path: string, link: string): Promise<TFile | null> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return null;
+    const content = await this.app.vault.cachedRead(file);
+    return content.includes(originLine(link)) ? file : null;
   }
 
   /**
