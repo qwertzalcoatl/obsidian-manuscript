@@ -410,11 +410,25 @@ export class ReviewView extends ItemView {
     }
 
     const span = (text: string, cls: string) => el.createSpan({ cls }).setText(text);
+    // The manuscript's own placeholder, on the card. A construct you have
+    // started but not written into is an entry like any other, so it gets a
+    // card — and without this the card is a blank line. Exact emptiness rather
+    // than trimmed, so the two agree: {++  ++} has a body and gets no
+    // placeholder in either place.
+    const placeholder = () =>
+      el.createSpan({ cls: 'sn-critic-placeholder' }).setText('insert…');
 
     if (entry.kind === 'substitution') {
       span(entry.quote.trim(), 'sn-critic-deletion');
       el.createSpan({ cls: 'sn-critic-arrow' }).setText('→');
-      span((entry.replacement ?? '').trim(), 'sn-critic-insertion');
+      const replacement = entry.replacement ?? '';
+      if (replacement === '') placeholder();
+      else span(replacement.trim(), 'sn-critic-insertion');
+      return;
+    }
+
+    if (entry.kind === 'insertion' && entry.quote === '') {
+      placeholder();
       return;
     }
 

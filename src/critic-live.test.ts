@@ -15,6 +15,7 @@ import {
   constructToSelectOnDelete,
   criticDecorations,
   criticField,
+  emptyBodyOf,
   flashEffect,
   flashField,
   flashRangesFor,
@@ -676,5 +677,65 @@ describe('Live Preview decorations — the substitution arrow', () => {
 
   it('leaves an insertion alone, which has no arrow', () => {
     expect(paint('Sie {++leise ++}ging.').map((d) => d.cls)).not.toContain('sn-critic-arrow');
+  });
+});
+
+describe('emptyBodyOf — where the words are going to go', () => {
+  const bodyOf = (doc: string) => {
+    const state = EditorState.create({ doc, extensions: [unfoldField, criticField] });
+    return emptyBodyOf(state.field(criticField)[0]);
+  };
+
+  it('finds an insertion with nothing in it yet', () => {
+    expect(bodyOf('Sie {++++}ging.')).toEqual({ from: 7, to: 7 });
+  });
+
+  it('finds a substitution whose replacement is still empty', () => {
+    expect(bodyOf('Das {~~kalte~>~~} Licht.')).toEqual({ from: 14, to: 14 });
+  });
+
+  it('finds nothing once there is text in it', () => {
+    expect(bodyOf('Sie {++leise ++}ging.')).toBeNull();
+    expect(bodyOf('Das {~~kalte~>fahle~~} Licht.')).toBeNull();
+  });
+
+  it('leaves the kinds with no way to reach an empty body', () => {
+    // {----} and {====} are malformed rather than half-written: no command
+    // produces one, so there is no wording a placeholder could honestly use.
+    expect(bodyOf('Sie {----} fort.')).toBeNull();
+    expect(bodyOf('Sie {====} fort.')).toBeNull();
+    expect(bodyOf('Sie ging.{>><<}')).toBeNull();
+  });
+
+  it('looks only at the replacement half of a substitution', () => {
+    // {~~~>fahle~~} has an empty *quoted* half, which is a malformed construct
+    // rather than one being written — repair mode's business, not this.
+    expect(bodyOf('Das {~~~>fahle~~} Licht.')).toBeNull();
+  });
+});
+
+describe('Live Preview decorations — the placeholder', () => {
+  it('stands where an empty insertion would be typed', () => {
+    expect(paint('Sie {++++}ging.')).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-placeholder', from: 7, to: 7 })
+    );
+  });
+
+  it('stands after the arrow of an empty replacement', () => {
+    expect(paint('Das {~~kalte~>~~} Licht.')).toContainEqual(
+      expect.objectContaining({ cls: 'sn-critic-placeholder', from: 14, to: 14 })
+    );
+  });
+
+  it('is gone as soon as there is text', () => {
+    expect(paint('Sie {++leise ++}ging.').map((d) => d.cls)).not.toContain(
+      'sn-critic-placeholder'
+    );
+  });
+
+  it('is gone in repair mode, where the braces are on screen instead', () => {
+    expect(paintUnfolded('Sie {++++}ging.', 7).map((d) => d.cls)).not.toContain(
+      'sn-critic-placeholder'
+    );
   });
 });

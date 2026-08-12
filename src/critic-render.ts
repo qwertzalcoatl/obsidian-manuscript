@@ -114,6 +114,57 @@ function isArrowMarker(entry: Entry, marker: Range): boolean {
   return entry.kind === 'substitution' && marker.from === entry.spans.quote?.to;
 }
 
+/**
+ * Where the words go, before there are any.
+ *
+ * The one badge in the plugin, and the exception is narrow: the rule against
+ * them at the top of this file is about how an edit is shown, and this is not
+ * an edit being shown. It is an instruction to the writer — one that stays put
+ * if you click away from it, so it has to be impossible to mistake for the
+ * manuscript.
+ */
+class PlaceholderWidget extends WidgetType {
+  readonly cls = 'sn-critic-placeholder';
+  readonly text = 'insert…';
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.className = this.cls;
+    el.textContent = this.text;
+    return el;
+  }
+
+  eq(): boolean {
+    return true;
+  }
+}
+
+// side: 1 draws it after the position, so the caret sitting there renders
+// before it — at the point the first character will actually land.
+const PLACEHOLDER = Decoration.widget({ widget: new PlaceholderWidget(), side: 1 });
+
+/**
+ * The empty body a placeholder should stand in, or null.
+ *
+ * Only the two an authoring command can produce: an insertion's text, and a
+ * substitution's replacement half. An empty deletion or highlight is malformed
+ * rather than half-written — nothing makes one — so a placeholder there would
+ * be inventing wording for a case with no way in. A substitution whose *quoted*
+ * half is empty is the same: that is repair mode's business.
+ *
+ * Zero width is the whole point, so this compares from against to rather than
+ * reaching for nonEmpty, which would reject exactly the case being looked for.
+ */
+export function emptyBodyOf(entry: Entry): Range | null {
+  const body =
+    entry.kind === 'insertion'
+      ? entry.spans.quote
+      : entry.kind === 'substitution'
+        ? entry.spans.replacement
+        : null;
+  return body !== null && body.from === body.to ? body : null;
+}
+
 // ─── Repair mode ───
 
 /**
@@ -234,6 +285,13 @@ export function criticDecorations(state: EditorState): DecorationSet {
     mark(entry.spans.replacement, 'sn-critic-insertion');
 
     if (revealed) continue;
+
+    // A construct showing its raw source needs no help saying where to type:
+    // the braces are on screen, which is the whole point of repair mode.
+    const empty = emptyBodyOf(entry);
+    if (empty !== null) {
+      ranges.push({ from: empty.from, to: empty.to, value: PLACEHOLDER });
+    }
 
     for (const marker of entry.spans.markers) {
       if (!nonEmpty(marker)) continue;
