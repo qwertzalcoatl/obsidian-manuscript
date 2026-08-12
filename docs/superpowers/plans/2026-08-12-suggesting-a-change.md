@@ -714,7 +714,27 @@ In `styles.css`, after the `.sn-critic-arrow` rule:
 Run: `npm test && npm run build && npx tsc --noEmit`
 Expected: all exit 0.
 
-- [ ] **Step 8: Verify by hand in Obsidian**
+- [x] **Step 8: Verify by hand in Obsidian**
+
+**Done, and it found something.** The caret rendered to the *left* of the
+placeholder box, which reads as the caret being outside it. A harness rendering
+the real decorations in a real CodeMirror settled where the blame lay:
+
+| caret at | placeholder draws |
+|---|---|
+| the empty body | to its **right** — correct |
+| the end of the construct | to its **left** — what Obsidian showed |
+
+Adding an Obsidian-style `~~` strikethrough mark changed nothing, so it was not
+decoration ordering. The caret was simply never landing where `suggestChange`
+put it, which also means typing went *outside* the construct. Fixed in Task 5 by
+dispatching the change and the selection as one CodeMirror transaction.
+
+The harness is worth rebuilding if this comes up again — an entry that imports
+`criticEditorExtension` into a bare `EditorView`, bundled with
+`npx esbuild <entry> --bundle --format=iife`, served over http (Chrome will not
+navigate to `file://`), probed with `view.coordsAtPos(pos)` rather than by
+reading the drawn cursor, which lags a frame behind the state.
 
 Type `Sie {++++}ging.` and `Das {~~kalte~>~~} Licht.` into a note by hand — the command does not exist until Task 5.
 
