@@ -6,6 +6,7 @@ import {
   renderRejected,
   sanitizeComment,
   setComment,
+  suggestChange,
   type Entry,
 } from './critic';
 
@@ -731,5 +732,45 @@ describe('the comment command, end to end through the pure layer', () => {
     const after = setComment(content, parseCritic(content)[0], 'Absatz kürzen');
     expect(parseCritic(after)[0].comment).toBe('Absatz kürzen');
     expect(parseCritic(after)).toHaveLength(1);
+  });
+});
+
+describe('suggestChange — what the command writes', () => {
+  it('proposes an addition when nothing is selected', () => {
+    expect(suggestChange('')).toEqual({ text: '{++++}', caret: 3 });
+  });
+
+  it('proposes a replacement for a selection', () => {
+    expect(suggestChange('kalte')).toEqual({ text: '{~~kalte~>~~}', caret: 10 });
+  });
+
+  it('puts the caret exactly at the empty body it wrote', () => {
+    for (const selection of ['', 'kalte', 'ein längerer Satzteil']) {
+      const change = suggestChange(selection);
+      if (change === null) throw new Error('expected a change');
+      const entry = parseCritic(change.text)[0];
+      const body = entry.kind === 'insertion' ? entry.spans.quote : entry.spans.replacement;
+      expect(body).toEqual({ from: change.caret, to: change.caret });
+    }
+  });
+
+  it('parses back to exactly one entry', () => {
+    expect(parseCritic('Sie {++++}ging.')).toHaveLength(1);
+    const sub = parseCritic('Das {~~kalte~>~~} Licht.');
+    expect(sub).toHaveLength(1);
+    expect(sub[0].kind).toBe('substitution');
+    expect(sub[0].quote).toBe('kalte');
+    expect(sub[0].replacement).toBe('');
+  });
+
+  it("refuses a selection carrying the substitution's own markers", () => {
+    // `~>` would split the construct in the wrong place and `~~}` would close
+    // it early — both silently, both rewriting a manuscript.
+    expect(suggestChange('a~>b')).toBeNull();
+    expect(suggestChange('a~~}b')).toBeNull();
+  });
+
+  it('accepts a selection with a lone tilde, which breaks nothing', () => {
+    expect(suggestChange('a~b')).toEqual({ text: '{~~a~b~>~~}', caret: 8 });
   });
 });

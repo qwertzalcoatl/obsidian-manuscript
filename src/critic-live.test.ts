@@ -23,7 +23,7 @@ import {
   unfoldEffect,
   unfoldField,
 } from './critic-render';
-import { parseCritic } from './critic';
+import { parseCritic, suggestChange } from './critic';
 
 interface Painted {
   from: number;
@@ -593,5 +593,37 @@ describe('constructToSelectOnDelete — the line a collapsed comment took with i
 
   it('leaves the prose above it alone', () => {
     expect(constructToSelectOnDelete(state(), 5, false)).toBeNull();
+  });
+});
+
+describe('suggestChange — the caret lands somewhere it can rest', () => {
+  // The bug this exists for: ⌘⇧M put the caret three characters into a
+  // six-character hidden range, so you were typing into text that never
+  // rendered and the first arrow key threw the caret out of it.
+  const reachable = (doc: string, caret: number) => {
+    const state = EditorState.create({
+      doc,
+      extensions: [unfoldField, criticField],
+      selection: { anchor: caret },
+    });
+    return !hiddenRanges(state).some((r) => caret > r.from && caret < r.to);
+  };
+
+  it('is not inside a hidden range, in either mode', () => {
+    for (const selection of ['', 'kalte', 'ein längerer Satzteil', 'a~b']) {
+      const change = suggestChange(selection);
+      if (change === null) throw new Error('expected a change');
+      const doc = `Sie ${change.text} fort.`;
+      expect(reachable(doc, 4 + change.caret)).toBe(true);
+    }
+  });
+
+  it('sits between the two markers it was written between', () => {
+    const doc = 'Sie {++++} fort.';
+    const state = EditorState.create({ doc, extensions: [unfoldField, criticField] });
+    expect(hiddenRanges(state)).toEqual([
+      { from: 4, to: 7 },
+      { from: 7, to: 10 },
+    ]);
   });
 });

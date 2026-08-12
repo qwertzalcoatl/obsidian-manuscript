@@ -572,6 +572,32 @@ export function setComment(content: string, entry: Entry, text: string): string 
   return content.slice(0, comment.from) + content.slice(comment.to);
 }
 
+/**
+ * What the Suggest a change command writes, and where the caret goes in it.
+ *
+ * Here rather than in the command because this is marker arithmetic, and marker
+ * arithmetic in main.ts is what broke the comment hotkey: it put the caret three
+ * characters into a six-character marker that edit-through had made both
+ * invisible and atomic. These offsets are safe for the opposite reason — an
+ * empty body is the boundary between two hidden ranges rather than a position
+ * inside one — and critic-live.test.ts asserts exactly that against
+ * hiddenRanges, which is the check the last one was missing.
+ *
+ * Both constructs are written empty on purpose. The words are typed into the
+ * manuscript afterwards, which is where manuscript text belongs.
+ */
+export function suggestChange(selection: string): { text: string; caret: number } | null {
+  if (selection === '') return { text: '{++++}', caret: 3 };
+
+  // A selection carrying either of the substitution's own markers cannot be
+  // wrapped in one: `~>` splits the construct in the wrong place and `~~}`
+  // closes it early, and both do it quietly. Refusing beats guessing, for the
+  // same reason resolvedText throws rather than picking an outcome.
+  if (selection.includes('~>') || selection.includes('~~}')) return null;
+
+  return { text: `{~~${selection}~>~~}`, caret: 3 + selection.length + 2 };
+}
+
 function renderAll(content: string, suggestionMode: 'accept' | 'reject'): string {
   const edits = parseCritic(content).map((entry) => ({
     from: entry.from,
