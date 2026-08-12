@@ -1,4 +1,4 @@
-# Sheet Navigator
+# Manuscript
 
 A single-column, drill-down sidebar for [Obsidian](https://obsidian.md) — built for writers who organize novels, screenplays, and long-form projects in folders and numbered files.
 
@@ -18,7 +18,7 @@ Browse your vault one level at a time: chapters show as cards with note counts, 
 
 ## How it works
 
-Open the navigator from the **ribbon icon** (layers) or the command palette ("Open Sheet Navigator").
+Open the navigator from the **ribbon icon** (layers) or the command palette ("Open Manuscript").
 
 The navigator shows the contents of the current folder. Folders appear as chapter cards with note counts and a drill-in chevron. Notes appear as cards with a title and content preview.
 
@@ -35,7 +35,7 @@ Numbered items come first in numeric order, then everything else alphabetically.
 
 ### Drag-and-drop reordering
 
-Enable **Settings > Sheet Navigator > Enable ordering** to show drag handles. Dragging and dropping renumbers the folder sequentially (1, 2, 3…), preserving each item's title and its choice of separator.
+Enable **Settings > Manuscript > Enable ordering** to show drag handles. Dragging and dropping renumbers the folder sequentially (1, 2, 3…), preserving each item's title and its choice of separator.
 
 Items **without** a number are left alone — they keep their exact filename and sort to the end of the list. Dragging an unnumbered item into the numbered run is the one action that gives it a number.
 
@@ -43,7 +43,7 @@ Folders and notes are numbered as separate sequences, so dragging a note onto a 
 
 ## Editorial review
 
-An editorial pass on a chapter is a round trip: the text gets marked up, then you walk the marks and decide. Sheet Navigator stores those marks as [CriticMarkup](http://criticmarkup.com) — plain text in the note itself, no sidecar database — and shows them in a **Review** drawer for the sheet you have open.
+An editorial pass on a chapter is a round trip: the text gets marked up, then you walk the marks and decide. Manuscript stores those marks as [CriticMarkup](http://criticmarkup.com) — plain text in the note itself, no sidecar database — and shows them in a **Review** drawer for the sheet you have open.
 
 The workflow this is built for: ask Claude (or any assistant) to *"review chapter 3 and mark it up in CriticMarkup"*, then open the drawer and work through what comes back.
 
@@ -119,7 +119,7 @@ The right-click menu carries **Comment on selection**, **Highlight selection**, 
 
 ## Settings
 
-**Settings > Community plugins > Sheet Navigator**
+**Settings > Community plugins > Manuscript**
 
 | Setting | Default | Effect |
 |---|---|---|
@@ -131,13 +131,13 @@ The right-click menu carries **Comment on selection**, **Highlight selection**, 
 ### From Obsidian Community Plugins
 
 1. Open **Settings > Community plugins > Browse**
-2. Search for "Sheet Navigator"
+2. Search for "Manuscript"
 3. Click **Install**, then **Enable**
 
 ### Manual
 
 1. Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](../../releases/latest)
-2. Create a folder `sheet-navigator` in your vault's `.obsidian/plugins/` directory
+2. Create a folder `manuscript` in your vault's `.obsidian/plugins/` directory
 3. Copy the three files into it
 4. Enable the plugin in **Settings > Community plugins**
 

@@ -35,10 +35,10 @@ function mightHaveMarkup(text: string): boolean {
 }
 
 const QUOTE_CLASS: Record<Entry['kind'], string> = {
-  insertion: 'sn-critic-insertion',
-  deletion: 'sn-critic-deletion',
-  substitution: 'sn-critic-deletion',
-  highlight: 'sn-critic-highlight',
+  insertion: 'ms-critic-insertion',
+  deletion: 'ms-critic-deletion',
+  substitution: 'ms-critic-deletion',
+  highlight: 'ms-critic-highlight',
   comment: '',
 };
 
@@ -85,7 +85,7 @@ const HIDDEN = Decoration.replace({});
  * The drawer card has always built it this way, as a sibling span.
  */
 class ArrowWidget extends WidgetType {
-  readonly cls = 'sn-critic-arrow';
+  readonly cls = 'ms-critic-arrow';
   readonly text = '→';
 
   toDOM(): HTMLElement {
@@ -128,7 +128,7 @@ function isArrowMarker(entry: Entry, marker: Range): boolean {
  * rather than reasoned about.
  */
 class PlaceholderWidget extends WidgetType {
-  readonly cls = 'sn-critic-placeholder';
+  readonly cls = 'ms-critic-placeholder';
   readonly text = 'insert…';
 
   toDOM(): HTMLElement {
@@ -256,7 +256,7 @@ export function criticDecorations(state: EditorState): DecorationSet {
       ranges.push({
         from: entry.from,
         to: entry.to,
-        value: Decoration.mark({ class: 'sn-critic-substitution' }),
+        value: Decoration.mark({ class: 'ms-critic-substitution' }),
       });
     }
 
@@ -270,7 +270,7 @@ export function criticDecorations(state: EditorState): DecorationSet {
       ranges.push({
         from: entry.from,
         to: entry.to,
-        value: Decoration.mark({ class: 'sn-critic-has-comment' }),
+        value: Decoration.mark({ class: 'ms-critic-has-comment' }),
       });
     }
 
@@ -281,12 +281,12 @@ export function criticDecorations(state: EditorState): DecorationSet {
       ranges.push({
         from: entry.from,
         to: entry.to,
-        value: Decoration.mark({ class: 'sn-critic-revealed' }),
+        value: Decoration.mark({ class: 'ms-critic-revealed' }),
       });
     }
 
     mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
-    mark(entry.spans.replacement, 'sn-critic-insertion');
+    mark(entry.spans.replacement, 'ms-critic-insertion');
 
     if (revealed) continue;
 
@@ -495,8 +495,8 @@ export const flashField = StateField.define<DecorationSet>({
     for (const e of tr.effects) {
       if (e.is(flashEffect)) {
         const mark = Decoration.mark({
-          class: 'sn-critic-flash',
-          attributes: { 'data-sn-flash': String(e.value.key) },
+          class: 'ms-critic-flash',
+          attributes: { 'data-ms-flash': String(e.value.key) },
         });
         return Decoration.set(e.value.ranges.map((r) => mark.range(r.from, r.to)));
       }
@@ -779,7 +779,7 @@ export function renderCriticMarkup(root: HTMLElement): void {
       for (const marker of entry.spans.markers) {
         if (!nonEmpty(marker)) continue;
         if (isArrowMarker(entry, marker)) {
-          ops.push({ ...marker, op: 'text', text: '→', cls: 'sn-critic-arrow' });
+          ops.push({ ...marker, op: 'text', text: '→', cls: 'ms-critic-arrow' });
         } else {
           ops.push({ ...marker, op: 'hide' });
         }
@@ -792,14 +792,14 @@ export function renderCriticMarkup(root: HTMLElement): void {
         const cls =
           entry.comment === null
             ? QUOTE_CLASS[entry.kind]
-            : `${QUOTE_CLASS[entry.kind]} sn-critic-has-comment`;
+            : `${QUOTE_CLASS[entry.kind]} ms-critic-has-comment`;
         ops.push({ ...entry.spans.quote, op: 'wrap', cls, label });
       }
       if (nonEmpty(entry.spans.replacement)) {
         ops.push({
           ...entry.spans.replacement,
           op: 'wrap',
-          cls: 'sn-critic-insertion',
+          cls: 'ms-critic-insertion',
           label,
         });
       }

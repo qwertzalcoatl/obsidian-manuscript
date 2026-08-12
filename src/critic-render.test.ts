@@ -28,39 +28,39 @@ describe('renderCriticMarkup — markers disappear, text survives', () => {
   it('renders an insertion', () => {
     const root = render('<p>Sie {++leise ++}ging.</p>');
     expect(root.textContent).toBe('Sie leise ging.');
-    expect(root.querySelector('.sn-critic-insertion')?.textContent).toBe('leise ');
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('leise ');
   });
 
   it('renders a deletion', () => {
     const root = render('<p>Sie ging{-- fort--}.</p>');
     expect(root.textContent).toBe('Sie ging fort.');
-    expect(root.querySelector('.sn-critic-deletion')?.textContent).toBe(' fort');
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe(' fort');
   });
 
   it('renders a substitution as struck old followed by new', () => {
     const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
     expect(root.textContent).toBe('Das kalte→fahle Licht.');
-    expect(root.querySelector('.sn-critic-deletion')?.textContent).toBe('kalte');
-    expect(root.querySelector('.sn-critic-insertion')?.textContent).toBe('fahle');
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe('kalte');
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('fahle');
   });
 
   it('renders a highlight', () => {
     const root = render('<p>Sie {==ging==} fort.</p>');
     expect(root.textContent).toBe('Sie ging fort.');
-    expect(root.querySelector('.sn-critic-highlight')?.textContent).toBe('ging');
+    expect(root.querySelector('.ms-critic-highlight')?.textContent).toBe('ging');
   });
 
   it('removes a standalone comment entirely', () => {
     const root = render('<p>Er zögerte. {>>Mehr Spannung<<}</p>');
     expect(root.textContent).toBe('Er zögerte. ');
-    expect(root.querySelector('.sn-critic-glyph')).toBeNull();
+    expect(root.querySelector('.ms-critic-glyph')).toBeNull();
   });
 
   it('keeps the anchor and removes an attached comment', () => {
     const root = render('<p>Sie {==ging==}{>>zu abrupt?<<} fort.</p>');
     expect(root.textContent).toBe('Sie ging fort.');
-    expect(root.querySelector('.sn-critic-highlight')?.textContent).toBe('ging');
-    expect(root.querySelector('.sn-critic-glyph')).toBeNull();
+    expect(root.querySelector('.ms-critic-highlight')?.textContent).toBe('ging');
+    expect(root.querySelector('.ms-critic-glyph')).toBeNull();
   });
 });
 
@@ -76,13 +76,13 @@ describe('renderCriticMarkup — constructs spanning several DOM nodes', () => {
   it('renders a construct whose markers sit in different nodes', () => {
     const root = render('<p>{--weg <em>und</em> fort--}</p>');
     expect(root.textContent).toBe('weg und fort');
-    expect(root.querySelectorAll('.sn-critic-deletion').length).toBeGreaterThan(0);
+    expect(root.querySelectorAll('.ms-critic-deletion').length).toBeGreaterThan(0);
   });
 
   it('styles every slice of a multi-node quote', () => {
     const root = render('<p>{==a<em>b</em>c==}</p>');
     expect(root.textContent).toBe('abc');
-    const styled = [...root.querySelectorAll('.sn-critic-highlight')]
+    const styled = [...root.querySelectorAll('.ms-critic-highlight')]
       .map((el) => el.textContent)
       .join('');
     expect(styled).toBe('abc');
@@ -130,7 +130,7 @@ describe('renderCriticMarkup — what it leaves alone', () => {
   it('leaves a rendered mark element alone — a lone highlight is not an entry', () => {
     const root = render('<p>Sie <mark>ging</mark> fort.</p>');
     expect(root.querySelector('mark')?.textContent).toBe('ging');
-    expect(root.querySelector('.sn-critic-highlight')).toBeNull();
+    expect(root.querySelector('.ms-critic-highlight')).toBeNull();
   });
 
   it('renders markup inside a list item and a heading', () => {
@@ -148,43 +148,43 @@ describe('renderCriticMarkup — what it leaves alone', () => {
 describe('renderCriticMarkup — a construct carrying a note', () => {
   it('marks the anchor of a commented deletion', () => {
     const root = render('<p>Sie {--ging--}{>>zu spät?<<} fort.</p>');
-    expect(root.querySelector('.sn-critic-has-comment')?.textContent).toBe('ging');
+    expect(root.querySelector('.ms-critic-has-comment')?.textContent).toBe('ging');
   });
 
   it('leaves an uncommented deletion unmarked', () => {
     const root = render('<p>Sie {--ging--} fort.</p>');
-    expect(root.querySelector('.sn-critic-has-comment')).toBeNull();
+    expect(root.querySelector('.ms-critic-has-comment')).toBeNull();
   });
 });
 
 describe('renderCriticMarkup — the substitution separator', () => {
   it('marks the replacement half of a substitution', () => {
     const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
-    const halves = root.querySelectorAll('.sn-critic-insertion');
+    const halves = root.querySelectorAll('.ms-critic-insertion');
     expect(halves).toHaveLength(1);
     expect(halves[0].textContent).toBe('fahle');
   });
 
   it('renders the arrow as its own element between the halves', () => {
     const root = render('<p>Das {~~kalte~>fahle~~} Licht.</p>');
-    expect(root.querySelector('.sn-critic-arrow')?.textContent).toBe('→');
+    expect(root.querySelector('.ms-critic-arrow')?.textContent).toBe('→');
     expect(root.textContent).toBe('Das kalte→fahle Licht.');
   });
 
   it('renders the arrow when the replacement is empty', () => {
     const root = render('<p>Das {~~kalte~>~~} Licht.</p>');
-    expect(root.querySelector('.sn-critic-arrow')?.textContent).toBe('→');
+    expect(root.querySelector('.ms-critic-arrow')?.textContent).toBe('→');
   });
 
   it('draws no placeholder — a reader has nothing to type into', () => {
     const root = render('<p>Sie {++++}ging.</p>');
-    expect(root.querySelector('.sn-critic-placeholder')).toBeNull();
+    expect(root.querySelector('.ms-critic-placeholder')).toBeNull();
     expect(root.textContent).toBe('Sie ging.');
   });
 
   it('leaves a plain insertion without an arrow', () => {
     const root = render('<p>Sie {++leise ++}ging.</p>');
-    expect(root.querySelector('.sn-critic-arrow')).toBeNull();
-    expect(root.querySelector('.sn-critic-insertion')?.textContent).toBe('leise ');
+    expect(root.querySelector('.ms-critic-arrow')).toBeNull();
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('leise ');
   });
 });

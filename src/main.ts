@@ -41,7 +41,7 @@ import {
   type PlanItem,
 } from "./naming";
 
-const VIEW_TYPE = "sheet-navigator-view";
+const VIEW_TYPE = "manuscript-view";
 
 /** Keystrokes rarely change the markup count; no need to recount on each one. */
 const COUNT_DEBOUNCE = 300;
@@ -59,12 +59,12 @@ const WRAPPERS: Record<MarkupKind, [string, string]> = {
   comment: ["{==", "==}{>><<}"],
 };
 
-interface SheetNavigatorSettings {
+interface ManuscriptSettings {
   orderingEnabled: boolean;
   reviewEnabled: boolean;
 }
 
-const DEFAULT_SETTINGS: SheetNavigatorSettings = {
+const DEFAULT_SETTINGS: ManuscriptSettings = {
   orderingEnabled: false,
   reviewEnabled: true,
 };
@@ -113,8 +113,8 @@ function displayNameOf(item: TAbstractFile): string {
 
 // ─── View ───
 
-export class SheetNavigatorView extends ItemView {
-  plugin: SheetNavigatorPlugin;
+export class ManuscriptView extends ItemView {
+  plugin: ManuscriptPlugin;
   currentPath: string;
   history: HistoryEntry[];
   dragState: DragState | null;
@@ -143,7 +143,7 @@ export class SheetNavigatorView extends ItemView {
   private activeMarkupCount = 0;
   private countTimer: number | null = null;
 
-  constructor(leaf: WorkspaceLeaf, plugin: SheetNavigatorPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: ManuscriptPlugin) {
     super(leaf);
     this.plugin = plugin;
     this.currentPath = "/";
@@ -164,10 +164,10 @@ export class SheetNavigatorView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.containerEl.empty();
-    this.containerEl.addClass("sheet-navigator");
+    this.containerEl.addClass("manuscript");
 
-    this.headerEl = this.containerEl.createDiv({ cls: "sheet-nav-header" });
-    this.listEl = this.containerEl.createDiv({ cls: "sheet-nav-list" });
+    this.headerEl = this.containerEl.createDiv({ cls: "ms-nav-header" });
+    this.listEl = this.containerEl.createDiv({ cls: "ms-nav-list" });
 
     this.registerEvent(
       this.app.workspace.on("file-open", () => {
@@ -391,7 +391,7 @@ export class SheetNavigatorView extends ItemView {
         );
       }
       if (children.length === 0) {
-        const empty = createDiv({ cls: "sheet-nav-empty" });
+        const empty = createDiv({ cls: "ms-nav-empty" });
         empty.setText(
           this.currentPath === "/"
             ? "This vault has no notes yet."
@@ -412,17 +412,17 @@ export class SheetNavigatorView extends ItemView {
     }
 
     this.fillPreviews(seq).catch((err) =>
-      console.error("Sheet Navigator: preview pass failed", err)
+      console.error("Manuscript: preview pass failed", err)
     );
     this.sweepTempNames(folder).catch((err) =>
-      console.error("Sheet Navigator: temp-name sweep failed", err)
+      console.error("Manuscript: temp-name sweep failed", err)
     );
   }
 
   private renderErrorState(err: unknown): void {
-    console.error("Sheet Navigator: render failed", err);
+    console.error("Manuscript: render failed", err);
     this.listEl.empty();
-    const box = this.listEl.createDiv({ cls: "sheet-nav-empty" });
+    const box = this.listEl.createDiv({ cls: "ms-nav-empty" });
     box.setText("Could not display this folder. Try navigating up a level.");
   }
 
@@ -430,23 +430,23 @@ export class SheetNavigatorView extends ItemView {
     this.headerEl.empty();
 
     if (this.currentPath !== "/") {
-      const backBtn = this.headerEl.createDiv({ cls: "sheet-nav-back" });
-      backBtn.createSpan({ cls: "sheet-nav-back-arrow" }).setText("‹");
+      const backBtn = this.headerEl.createDiv({ cls: "ms-nav-back" });
+      backBtn.createSpan({ cls: "ms-nav-back-arrow" }).setText("‹");
       const parentName =
         this.history.length > 0
           ? this.history[this.history.length - 1].name
           : "Vault";
-      backBtn.createSpan({ text: parentName, cls: "sheet-nav-back-label" });
+      backBtn.createSpan({ text: parentName, cls: "ms-nav-back-label" });
       backBtn.addEventListener("click", () => this.goUp());
     }
 
-    const titleRow = this.headerEl.createDiv({ cls: "sheet-nav-title-row" });
-    titleRow.createDiv({ cls: "sheet-nav-title" }).setText(folder.name || "Vault");
+    const titleRow = this.headerEl.createDiv({ cls: "ms-nav-title-row" });
+    titleRow.createDiv({ cls: "ms-nav-title" }).setText(folder.name || "Vault");
 
-    const toolbar = titleRow.createDiv({ cls: "sheet-nav-toolbar" });
+    const toolbar = titleRow.createDiv({ cls: "ms-nav-toolbar" });
 
     const newBtn = toolbar.createDiv({
-      cls: "sheet-nav-toolbar-btn",
+      cls: "ms-nav-toolbar-btn",
       attr: { "aria-label": "New note" },
     });
     setIcon(newBtn, "file-plus");
@@ -456,14 +456,14 @@ export class SheetNavigatorView extends ItemView {
 
     const count = this.activeMarkupCount;
     const reviewBtn = toolbar.createDiv({
-      cls: `sheet-nav-toolbar-btn sheet-nav-review-btn${count > 0 ? " is-active" : " is-dimmed"}`,
+      cls: `ms-nav-toolbar-btn ms-nav-review-btn${count > 0 ? " is-active" : " is-dimmed"}`,
       attr: {
         "aria-label": count > 0 ? `Review (${count})` : "Review — nothing marked up",
       },
     });
     setIcon(reviewBtn, "message-square-quote");
     if (count > 0) {
-      reviewBtn.createSpan({ cls: "sheet-nav-review-count" }).setText(String(count));
+      reviewBtn.createSpan({ cls: "ms-nav-review-count" }).setText(String(count));
     }
     reviewBtn.addEventListener("click", () => void this.plugin.activateReviewView());
   }
@@ -517,8 +517,8 @@ export class SheetNavigatorView extends ItemView {
     const folderChars = widest(true);
     const fileChars = widest(false);
 
-    this.listEl.style.setProperty("--sn-folder-num-chars", String(folderChars || 1));
-    this.listEl.style.setProperty("--sn-file-num-chars", String(fileChars || 1));
+    this.listEl.style.setProperty("--ms-folder-num-chars", String(folderChars || 1));
+    this.listEl.style.setProperty("--ms-file-num-chars", String(fileChars || 1));
     this.listEl.dataset.folderNums = folderChars > 0 ? "some" : "none";
     this.listEl.dataset.fileNums = fileChars > 0 ? "some" : "none";
   }
@@ -527,21 +527,21 @@ export class SheetNavigatorView extends ItemView {
 
   private buildFolderCard(folder: TFolder): HTMLElement {
     const ordering = this.plugin.settings.orderingEnabled;
-    const card = createDiv({ cls: "sheet-nav-card sheet-nav-folder-card" });
+    const card = createDiv({ cls: "ms-nav-card ms-nav-folder-card" });
 
-    if (ordering) card.createDiv({ cls: "sheet-nav-drag-handle" }).setText("⠿");
+    if (ordering) card.createDiv({ cls: "ms-nav-drag-handle" }).setText("⠿");
 
     const parsed = parseItemName(folder.name);
 
     // The slot is always present: omitting it when there is no number is what
     // made a list mixing "1 – Prolog" and "Anhang" line up raggedly.
-    const numEl = card.createDiv({ cls: "sheet-nav-chapter-num" });
+    const numEl = card.createDiv({ cls: "ms-nav-chapter-num" });
     if (parsed.number) numEl.setText(parsed.number);
 
-    const content = card.createDiv({ cls: "sheet-nav-folder-content" });
+    const content = card.createDiv({ cls: "ms-nav-folder-content" });
 
     const label = displayTitle(parsed);
-    const nameEl = content.createDiv({ cls: "sheet-nav-card-name" });
+    const nameEl = content.createDiv({ cls: "ms-nav-card-name" });
     nameEl.setText(label.text);
     if (label.isUntitled) nameEl.addClass("is-untitled");
 
@@ -551,9 +551,9 @@ export class SheetNavigatorView extends ItemView {
     const parts: string[] = [];
     if (folderCount > 0) parts.push(`${folderCount} folder${folderCount > 1 ? "s" : ""}`);
     if (noteCount > 0) parts.push(`${noteCount} note${noteCount > 1 ? "s" : ""}`);
-    content.createDiv({ cls: "sheet-nav-card-meta" }).setText(parts.join(" · "));
+    content.createDiv({ cls: "ms-nav-card-meta" }).setText(parts.join(" · "));
 
-    const chevron = card.createDiv({ cls: "sheet-nav-chevron" });
+    const chevron = card.createDiv({ cls: "ms-nav-chevron" });
     chevron.setText("›");
 
     card.addEventListener("click", () => this.drillInto(folder));
@@ -570,32 +570,32 @@ export class SheetNavigatorView extends ItemView {
 
   private buildFileCard(file: TFile): HTMLElement {
     const ordering = this.plugin.settings.orderingEnabled;
-    const card = createDiv({ cls: "sheet-nav-card sheet-nav-file-card" });
+    const card = createDiv({ cls: "ms-nav-card ms-nav-file-card" });
     card.dataset.path = file.path;
 
-    if (ordering) card.createDiv({ cls: "sheet-nav-drag-handle" }).setText("⠿");
+    if (ordering) card.createDiv({ cls: "ms-nav-drag-handle" }).setText("⠿");
 
     const parsed = parseItemName(file.basename);
 
-    const numEl = card.createDiv({ cls: "sheet-nav-file-num" });
+    const numEl = card.createDiv({ cls: "ms-nav-file-num" });
     if (parsed.number) numEl.setText(parsed.number);
 
-    const content = card.createDiv({ cls: "sheet-nav-file-content" });
+    const content = card.createDiv({ cls: "ms-nav-file-content" });
 
     // displayTitle never echoes the number the badge already shows, so a note
     // named "3.md" no longer renders "3" twice.
     const label = displayTitle(parsed);
-    const titleLine = content.createDiv({ cls: "sheet-nav-title-line" });
-    const titleEl = titleLine.createDiv({ cls: "sheet-nav-card-title" });
+    const titleLine = content.createDiv({ cls: "ms-nav-title-line" });
+    const titleEl = titleLine.createDiv({ cls: "ms-nav-card-title" });
     titleEl.setText(label.text);
     if (label.isUntitled) titleEl.addClass("is-untitled");
 
     // Filled by the preview pass, which already reads this file — an empty
     // badge collapses, so a note with no markup shows nothing.
-    const badgeEl = titleLine.createDiv({ cls: "sheet-nav-card-badge" });
+    const badgeEl = titleLine.createDiv({ cls: "ms-nav-card-badge" });
 
     // Always created, even for an empty note, so card heights stay uniform.
-    const previewEl = content.createDiv({ cls: "sheet-nav-card-preview" });
+    const previewEl = content.createDiv({ cls: "ms-nav-card-preview" });
     this.previewTargets.set(file.path, { preview: previewEl, badge: badgeEl });
 
     card.addEventListener("click", () => {
@@ -825,7 +825,7 @@ export class SheetNavigatorView extends ItemView {
         );
       }
     } catch (err) {
-      console.error("Sheet Navigator: reorder failed", err);
+      console.error("Manuscript: reorder failed", err);
       new Notice(
         `Reorder failed: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -860,7 +860,7 @@ export class SheetNavigatorView extends ItemView {
       try {
         await this.app.fileManager.renameFile(child, target);
       } catch (err) {
-        console.error("Sheet Navigator: could not recover", child.path, err);
+        console.error("Manuscript: could not recover", child.path, err);
         failed.push(child.path);
       }
     }
@@ -876,7 +876,7 @@ export class SheetNavigatorView extends ItemView {
 
     if (failed.length > 0) {
       new Notice(
-        `Sheet Navigator: ${failed.length} item(s) from an interrupted reorder need renaming by hand.`
+        `Manuscript: ${failed.length} item(s) from an interrupted reorder need renaming by hand.`
       );
     }
     this.requestRender();
@@ -1010,7 +1010,7 @@ export class SheetNavigatorView extends ItemView {
 
   highlightActive(): void {
     const activeFile = this.app.workspace.getActiveFile();
-    this.listEl.querySelectorAll(".sheet-nav-card").forEach((card) => {
+    this.listEl.querySelectorAll(".ms-nav-card").forEach((card) => {
       card.classList.remove("is-active");
     });
     if (activeFile) {
@@ -1059,10 +1059,10 @@ function tempToken(): string {
 
 // ─── Settings Tab ───
 
-class SheetNavigatorSettingTab extends PluginSettingTab {
-  plugin: SheetNavigatorPlugin;
+class ManuscriptSettingTab extends PluginSettingTab {
+  plugin: ManuscriptPlugin;
 
-  constructor(app: App, plugin: SheetNavigatorPlugin) {
+  constructor(app: App, plugin: ManuscriptPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -1071,7 +1071,7 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Sheet Navigator" });
+    containerEl.createEl("h2", { text: "Manuscript" });
 
     new Setting(containerEl)
       .setName("Enable ordering")
@@ -1086,7 +1086,7 @@ class SheetNavigatorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
             for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
               const view = leaf.view;
-              if (view instanceof SheetNavigatorView) view.requestRender();
+              if (view instanceof ManuscriptView) view.requestRender();
             }
           })
       );
@@ -1215,24 +1215,24 @@ class ConfirmModal extends Modal {
 
 // ─── Plugin ───
 
-export default class SheetNavigatorPlugin extends Plugin {
-  settings!: SheetNavigatorSettings;
+export default class ManuscriptPlugin extends Plugin {
+  settings!: ManuscriptSettings;
 
   async onload(): Promise<void> {
     await this.loadSettings();
 
-    this.registerView(VIEW_TYPE, (leaf) => new SheetNavigatorView(leaf, this));
+    this.registerView(VIEW_TYPE, (leaf) => new ManuscriptView(leaf, this));
     this.registerView(VIEW_TYPE_REVIEW, (leaf) => new ReviewView(leaf));
 
-    this.addSettingTab(new SheetNavigatorSettingTab(this.app, this));
+    this.addSettingTab(new ManuscriptSettingTab(this.app, this));
 
-    this.addRibbonIcon("layers", "Sheet Navigator", () => {
+    this.addRibbonIcon("layers", "Manuscript", () => {
       void this.activateView();
     });
 
     this.addCommand({
-      id: "open-sheet-navigator",
-      name: "Open Sheet Navigator",
+      id: "open-manuscript",
+      name: "Open Manuscript",
       callback: () => void this.activateView(),
     });
 
@@ -1478,9 +1478,9 @@ export default class SheetNavigatorPlugin extends Plugin {
     }
   }
 
-  getActiveSheetView(): SheetNavigatorView | null {
+  getActiveSheetView(): ManuscriptView | null {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
-      if (leaf.view instanceof SheetNavigatorView) return leaf.view;
+      if (leaf.view instanceof ManuscriptView) return leaf.view;
     }
     return null;
   }

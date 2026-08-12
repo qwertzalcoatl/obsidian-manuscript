@@ -28,7 +28,7 @@ import {
 import type { EditorView as CmEditorView } from '@codemirror/view';
 import { flashEntry } from './critic-render';
 
-export const VIEW_TYPE_REVIEW = 'sheet-navigator-review';
+export const VIEW_TYPE_REVIEW = 'manuscript-review';
 
 /** Long enough for a card's collapse animation to finish before the repaint. */
 const REFRESH_DELAY = 200;
@@ -129,10 +129,10 @@ export class ReviewView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.containerEl.empty();
-    this.containerEl.addClass('sheet-review');
+    this.containerEl.addClass('ms-review');
 
-    this.headerEl = this.containerEl.createDiv({ cls: 'sheet-review-header' });
-    this.listEl = this.containerEl.createDiv({ cls: 'sheet-review-list' });
+    this.headerEl = this.containerEl.createDiv({ cls: 'ms-review-header' });
+    this.listEl = this.containerEl.createDiv({ cls: 'ms-review-list' });
 
     this.registerEvent(this.app.workspace.on('file-open', () => this.requestRefresh()));
     // Only a genuine file switch is worth a repaint here. Clicking from
@@ -242,7 +242,7 @@ export class ReviewView extends ItemView {
         raw: content.slice(entry.from, entry.to),
       }));
     } catch (err) {
-      console.error('Sheet Navigator: could not read the sheet for review', err);
+      console.error('Manuscript: could not read the sheet for review', err);
       this.cards = [];
     }
     this.paint();
@@ -270,14 +270,14 @@ export class ReviewView extends ItemView {
 
     if (!this.file) {
       this.listEl
-        .createDiv({ cls: 'sheet-review-empty' })
+        .createDiv({ cls: 'ms-review-empty' })
         .setText('Open a note to review it.');
       return;
     }
 
     if (this.cards.length === 0) {
       this.listEl
-        .createDiv({ cls: 'sheet-review-empty' })
+        .createDiv({ cls: 'ms-review-empty' })
         .setText(
           `Nothing to review. Select a passage and press ${COMMENT_HOTKEY}; the note is typed here.`
         );
@@ -317,14 +317,14 @@ export class ReviewView extends ItemView {
   private paintHeader(): void {
     this.headerEl.empty();
 
-    const titleRow = this.headerEl.createDiv({ cls: 'sheet-review-title-row' });
-    titleRow.createDiv({ cls: 'sheet-review-title' }).setText(this.file?.basename ?? 'Review');
+    const titleRow = this.headerEl.createDiv({ cls: 'ms-review-title-row' });
+    titleRow.createDiv({ cls: 'ms-review-title' }).setText(this.file?.basename ?? 'Review');
 
     if (this.cards.length > 0) {
-      titleRow.createDiv({ cls: 'sheet-review-count' }).setText(String(this.cards.length));
+      titleRow.createDiv({ cls: 'ms-review-count' }).setText(String(this.cards.length));
 
       const more = titleRow.createDiv({
-        cls: 'sheet-review-more',
+        cls: 'ms-review-more',
         attr: { 'aria-label': 'More actions' },
       });
       setIcon(more, 'more-horizontal');
@@ -334,17 +334,17 @@ export class ReviewView extends ItemView {
 
   private buildCard(card: Card): HTMLElement {
     const { entry } = card;
-    const el = createDiv({ cls: 'sheet-review-card' });
+    const el = createDiv({ cls: 'ms-review-card' });
     el.dataset.kind = entry.kind;
     el.tabIndex = 0;
 
-    const quote = el.createDiv({ cls: 'sheet-review-quote' });
+    const quote = el.createDiv({ cls: 'ms-review-quote' });
     this.paintQuote(quote, entry);
 
     if (this.editing?.offset === entry.from) {
       this.buildNoteField(el, card);
     } else if (entry.comment) {
-      const note = el.createDiv({ cls: 'sheet-review-comment' });
+      const note = el.createDiv({ cls: 'ms-review-comment' });
       note.setText(entry.comment);
       note.addEventListener('click', (e) => {
         // Not the card's own click. reveal() dispatches into the editor, and
@@ -355,7 +355,7 @@ export class ReviewView extends ItemView {
       });
     }
 
-    const actions = el.createDiv({ cls: 'sheet-review-actions' });
+    const actions = el.createDiv({ cls: 'ms-review-actions' });
 
     // The way into a note that does not exist yet. Here rather than as a
     // placeholder line of its own: this row already hides until the card is
@@ -364,7 +364,7 @@ export class ReviewView extends ItemView {
     // {>><<} and no comment at all take the same route — the difference is
     // setComment's, not the card's.
     if (!entry.comment) {
-      const add = actions.createEl('button', { cls: 'sheet-review-action', text: 'Note' });
+      const add = actions.createEl('button', { cls: 'ms-review-action', text: 'Note' });
       add.addEventListener('click', (e) => {
         e.stopPropagation();
         void this.openNote(entry.from);
@@ -416,14 +416,14 @@ export class ReviewView extends ItemView {
     // than trimmed, so the two agree: {++  ++} has a body and gets no
     // placeholder in either place.
     const placeholder = () =>
-      el.createSpan({ cls: 'sn-critic-placeholder' }).setText('insert…');
+      el.createSpan({ cls: 'ms-critic-placeholder' }).setText('insert…');
 
     if (entry.kind === 'substitution') {
-      span(entry.quote.trim(), 'sn-critic-deletion');
-      el.createSpan({ cls: 'sn-critic-arrow' }).setText('→');
+      span(entry.quote.trim(), 'ms-critic-deletion');
+      el.createSpan({ cls: 'ms-critic-arrow' }).setText('→');
       const replacement = entry.replacement ?? '';
       if (replacement === '') placeholder();
-      else span(replacement.trim(), 'sn-critic-insertion');
+      else span(replacement.trim(), 'ms-critic-insertion');
       return;
     }
 
@@ -434,10 +434,10 @@ export class ReviewView extends ItemView {
 
     const cls =
       entry.kind === 'insertion'
-        ? 'sn-critic-insertion'
+        ? 'ms-critic-insertion'
         : entry.kind === 'deletion'
-          ? 'sn-critic-deletion'
-          : 'sn-critic-highlight';
+          ? 'ms-critic-deletion'
+          : 'ms-critic-highlight';
     span(entry.quote.trim(), cls);
   }
 
@@ -450,7 +450,7 @@ export class ReviewView extends ItemView {
    * for can put the text back.
    */
   private buildNoteField(parent: HTMLElement, card: Card): void {
-    const field = parent.createEl('textarea', { cls: 'sheet-review-comment-input' });
+    const field = parent.createEl('textarea', { cls: 'ms-review-comment-input' });
     field.value = this.editing?.draft ?? '';
     field.rows = 1;
     field.placeholder = 'Write a note…';
@@ -483,7 +483,7 @@ export class ReviewView extends ItemView {
     primary = false
   ): void {
     const btn = parent.createEl('button', {
-      cls: `sheet-review-action${primary ? ' is-primary' : ''}`,
+      cls: `ms-review-action${primary ? ' is-primary' : ''}`,
       text: label,
     });
     btn.addEventListener('click', (e) => {
@@ -616,7 +616,7 @@ export class ReviewView extends ItemView {
     if (cm) flashEntry(cm, card.entry);
 
     this.listEl
-      .querySelectorAll('.sheet-review-card.is-focused')
+      .querySelectorAll('.ms-review-card.is-focused')
       .forEach((el) => el.removeClass('is-focused'));
     const index = this.cards.indexOf(card);
     this.listEl.children[index]?.addClass('is-focused');
@@ -633,7 +633,7 @@ export class ReviewView extends ItemView {
     const el = this.listEl.children[index];
     if (!(el instanceof HTMLElement)) return;
 
-    this.listEl.querySelectorAll('.sheet-review-card.is-focused').forEach((c) => c.removeClass('is-focused'));
+    this.listEl.querySelectorAll('.ms-review-card.is-focused').forEach((c) => c.removeClass('is-focused'));
     el.addClass('is-focused');
     this.focusedOffset = offset;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });

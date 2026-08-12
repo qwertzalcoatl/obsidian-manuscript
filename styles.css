@@ -1,6 +1,6 @@
-/* Sheet Navigator */
+/* Manuscript */
 
-.sheet-navigator {
+.manuscript {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -8,13 +8,13 @@
 }
 
 /* Header */
-.sheet-nav-header {
+.ms-nav-header {
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--background-modifier-border);
   flex-shrink: 0;
 }
 
-.sheet-nav-back {
+.ms-nav-back {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -25,26 +25,26 @@
   padding: 2px 0;
 }
 
-.sheet-nav-back:hover {
+.ms-nav-back:hover {
   color: var(--text-accent-hover);
 }
 
-.sheet-nav-back-arrow {
+.ms-nav-back-arrow {
   font-size: 18px;
   line-height: 1;
   font-weight: 300;
 }
 
-.sheet-nav-back-label {
+.ms-nav-back-label {
   opacity: 0.9;
 }
 
-.sheet-nav-title-row {
+.ms-nav-title-row {
   display: flex;
   align-items: center;
 }
 
-.sheet-nav-title {
+.ms-nav-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-normal);
@@ -52,7 +52,7 @@
 }
 
 /* ─── Header toolbar ─── */
-.sheet-nav-toolbar {
+.ms-nav-toolbar {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -60,7 +60,7 @@
   flex-shrink: 0;
 }
 
-.sheet-nav-toolbar-btn {
+.ms-nav-toolbar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,20 +72,20 @@
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.sheet-nav-toolbar-btn:hover {
+.ms-nav-toolbar-btn:hover {
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
 /* Scrollable list */
-.sheet-nav-list {
+.ms-nav-list {
   flex: 1;
   overflow-y: auto;
   padding: 4px 8px 20px;
 }
 
 /* ─── Cards — shared ─── */
-.sheet-nav-card {
+.ms-nav-card {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
@@ -96,23 +96,23 @@
   position: relative;
 }
 
-.sheet-nav-card:hover {
+.ms-nav-card:hover {
   background-color: var(--background-modifier-hover);
 }
 
 /* Active note highlight */
-.sheet-nav-card.is-active {
+.ms-nav-card.is-active {
   background-color: var(--background-modifier-active-hover, var(--interactive-accent));
   box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
-.sheet-nav-card.is-active .sheet-nav-card-title {
+.ms-nav-card.is-active .ms-nav-card-title {
   color: var(--text-on-accent, var(--text-normal));
   font-weight: 700;
 }
 
 /* Drag handle */
-.sheet-nav-drag-handle {
+.ms-nav-drag-handle {
   flex-shrink: 0;
   width: 16px;
   font-size: 14px;
@@ -126,35 +126,35 @@
   text-align: center;
 }
 
-.sheet-nav-card:hover .sheet-nav-drag-handle {
+.ms-nav-card:hover .ms-nav-drag-handle {
   opacity: 0.5;
 }
 
-.sheet-nav-drag-handle:hover {
+.ms-nav-drag-handle:hover {
   opacity: 1 !important;
   color: var(--text-muted);
 }
 
-.sheet-nav-drag-handle:active {
+.ms-nav-drag-handle:active {
   cursor: grabbing;
 }
 
 /* Dragging state */
-.sheet-nav-card.is-dragging {
+.ms-nav-card.is-dragging {
   opacity: 0.3;
 }
 
 /* Drop indicators */
-.sheet-nav-card.drop-above {
+.ms-nav-card.drop-above {
   box-shadow: 0 -2px 0 0 var(--interactive-accent);
 }
 
-.sheet-nav-card.drop-below {
+.ms-nav-card.drop-below {
   box-shadow: 0 2px 0 0 var(--interactive-accent);
 }
 
 /* ─── Folder cards ─── */
-.sheet-nav-folder-card {
+.ms-nav-folder-card {
   align-items: center;
   gap: 0;
   padding: 14px 10px 14px 6px;
@@ -163,16 +163,16 @@
   margin: 0;
 }
 
-.sheet-nav-folder-card:last-of-type {
+.ms-nav-folder-card:last-of-type {
   border-bottom: none;
 }
 
-.sheet-nav-folder-card:hover {
+.ms-nav-folder-card:hover {
   background-color: transparent;
 }
 
 /* Subtle accent bar on left edge on hover */
-.sheet-nav-folder-card::before {
+.ms-nav-folder-card::before {
   content: '';
   position: absolute;
   left: 0;
@@ -185,7 +185,7 @@
   transition: opacity 0.2s ease, top 0.25s ease, bottom 0.25s ease;
 }
 
-.sheet-nav-folder-card:hover::before {
+.ms-nav-folder-card:hover::before {
   opacity: 1;
   top: 15%;
   bottom: 15%;
@@ -196,9 +196,9 @@
    titles line up in a folder that mixes numbered and unnumbered items. Its
    width follows the widest number present and is clamped at both ends, so
    "100" does not wrap and one odd name cannot squeeze every title. */
-.sheet-nav-chapter-num {
+.ms-nav-chapter-num {
   flex-shrink: 0;
-  width: clamp(32px, calc(var(--sn-folder-num-chars, 1) * 1ch + 4px), 6.5ch);
+  width: clamp(32px, calc(var(--ms-folder-num-chars, 1) * 1ch + 4px), 6.5ch);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;
@@ -216,24 +216,24 @@
 
 /* Nobody in this folder uses numbers — drop the column rather than indent
    every card against an empty gutter. */
-.sheet-nav-list[data-folder-nums="none"] .sheet-nav-chapter-num {
+.ms-nav-list[data-folder-nums="none"] .ms-nav-chapter-num {
   display: none;
 }
 
-.sheet-nav-folder-card:hover .sheet-nav-chapter-num {
+.ms-nav-folder-card:hover .ms-nav-chapter-num {
   opacity: 0.85;
   color: var(--text-normal);
 }
 
 /* Folder content */
-.sheet-nav-folder-content {
+.ms-nav-folder-content {
   flex: 1;
   min-width: 0;
   cursor: pointer;
   padding-left: 4px;
 }
 
-.sheet-nav-card-name {
+.ms-nav-card-name {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-normal);
@@ -241,14 +241,14 @@
   letter-spacing: 0.01em;
 }
 
-.sheet-nav-card-meta {
+.ms-nav-card-meta {
   font-size: 11px;
   color: var(--text-faint);
   margin-top: 2px;
   letter-spacing: 0.03em;
 }
 
-.sheet-nav-chevron {
+.ms-nav-chevron {
   font-size: 16px;
   color: var(--text-faint);
   font-weight: 300;
@@ -260,13 +260,13 @@
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.sheet-nav-folder-card:hover .sheet-nav-chevron {
+.ms-nav-folder-card:hover .ms-nav-chevron {
   opacity: 0.8;
   transform: translateX(2px);
 }
 
 /* ─── File cards ─── */
-.sheet-nav-file-card {
+.ms-nav-file-card {
   align-items: flex-start;
   gap: 0;
   padding: 14px 10px 14px 6px;
@@ -275,16 +275,16 @@
   margin: 0;
 }
 
-.sheet-nav-file-card:last-child {
+.ms-nav-file-card:last-child {
   border-bottom: none;
 }
 
-.sheet-nav-file-card:hover {
+.ms-nav-file-card:hover {
   background-color: transparent;
 }
 
 /* Accent bar on hover — same as folders */
-.sheet-nav-file-card::before {
+.ms-nav-file-card::before {
   content: '';
   position: absolute;
   left: 0;
@@ -297,16 +297,16 @@
   transition: opacity 0.2s ease, top 0.25s ease, bottom 0.25s ease;
 }
 
-.sheet-nav-file-card:hover::before {
+.ms-nav-file-card:hover::before {
   opacity: 1;
   top: 10%;
   bottom: 10%;
 }
 
-/* File number — see .sheet-nav-chapter-num for the sizing rationale. */
-.sheet-nav-file-num {
+/* File number — see .ms-nav-chapter-num for the sizing rationale. */
+.ms-nav-file-num {
   flex-shrink: 0;
-  width: clamp(22px, calc(var(--sn-file-num-chars, 1) * 1ch + 4px), 6.5ch);
+  width: clamp(22px, calc(var(--ms-file-num-chars, 1) * 1ch + 4px), 6.5ch);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;
@@ -322,23 +322,23 @@
   letter-spacing: -0.02em;
 }
 
-.sheet-nav-list[data-file-nums="none"] .sheet-nav-file-num {
+.ms-nav-list[data-file-nums="none"] .ms-nav-file-num {
   display: none;
 }
 
-.sheet-nav-file-card:hover .sheet-nav-file-num {
+.ms-nav-file-card:hover .ms-nav-file-num {
   opacity: 0.75;
   color: var(--text-normal);
 }
 
-.sheet-nav-file-content {
+.ms-nav-file-content {
   flex: 1;
   min-width: 0;
   cursor: pointer;
   padding-left: 4px;
 }
 
-.sheet-nav-card-title {
+.ms-nav-card-title {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-normal);
@@ -347,7 +347,7 @@
   letter-spacing: 0.01em;
 }
 
-.sheet-nav-card-preview {
+.ms-nav-card-preview {
   font-size: 11.5px;
   color: var(--text-faint);
   line-height: 1.5;
@@ -362,15 +362,15 @@
 
 /* A note named only for its number, e.g. "3.md" — the badge already shows the
    number, so the title slot carries a placeholder instead of repeating it. */
-.sheet-nav-card-title.is-untitled,
-.sheet-nav-card-name.is-untitled {
+.ms-nav-card-title.is-untitled,
+.ms-nav-card-name.is-untitled {
   color: var(--text-faint);
   font-style: italic;
   font-weight: 400;
 }
 
 /* ─── Empty state ─── */
-.sheet-nav-empty {
+.ms-nav-empty {
   padding: 18px 12px;
   font-size: 12.5px;
   color: var(--text-faint);
@@ -385,11 +385,11 @@
    meaning. Every colour resolves through an Obsidian variable so third-party
    themes restyle these along with everything else. */
 
-.sn-critic-insertion {
+.ms-critic-insertion {
   border-bottom: 1px solid var(--color-green, #4caf50);
 }
 
-.sn-critic-deletion {
+.ms-critic-deletion {
   text-decoration: line-through;
   text-decoration-color: var(--color-red, #e05252);
   text-decoration-thickness: 1px;
@@ -399,7 +399,7 @@
   color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
-.sn-critic-highlight {
+.ms-critic-highlight {
   background-color: color-mix(in srgb, var(--text-accent) 14%, transparent);
   border-radius: 2px;
 }
@@ -409,7 +409,7 @@
    rule because both existing decorations are solid, a strikethrough on
    deletions and a bottom border on insertions, so a dotted line reads as a
    different kind of statement instead of a louder version of the same one. */
-.sn-critic-has-comment {
+.ms-critic-has-comment {
   text-decoration: underline dotted;
   text-decoration-color: var(--text-accent);
   text-decoration-thickness: 1px;
@@ -421,8 +421,8 @@
    arrow and replacement too. CodeMirror nests the editor's mark and ours in
    either order, so both directions are cancelled here. The deletion span is
    unaffected: it draws its own line on its own element. */
-.sn-critic-substitution .cm-strikethrough,
-.cm-strikethrough:has(.sn-critic-substitution) {
+.ms-critic-substitution .cm-strikethrough,
+.cm-strikethrough:has(.ms-critic-substitution) {
   text-decoration: none;
 }
 
@@ -433,7 +433,7 @@
    generated content, and a descendant cannot cancel a decoration its ancestor
    draws. The same class in the editor, in Reading view and on the drawer card,
    which is what paintQuote exists for: a card and its text look alike. */
-.sn-critic-arrow {
+.ms-critic-arrow {
   color: var(--text-faint);
   padding: 0 0.3em;
   user-select: none;
@@ -444,9 +444,9 @@
    A wash rather than a border, and the difference is the whole point: edges
    make it an object sitting in the sentence, so typing reads as destroying
    something, while a wash reads as marked text — and marked text is something
-   you type over. The same 14% and 2px radius .sn-critic-highlight uses, in the
+   you type over. The same 14% and 2px radius .ms-critic-highlight uses, in the
    insertion's own green, so the two never read as the same kind of thing. Not
-   stronger than a highlight, for the reason .sn-critic-revealed gives.
+   stronger than a highlight, for the reason .ms-critic-revealed gives.
 
    Full size, not shrunk: marked text is the size of the words around it. The
    smaller face was compensating for having nothing else to say "this is not
@@ -455,7 +455,7 @@
    inline-block so no decoration on a surrounding construct paints through it,
    and the margin is breathing room against the next word — both gone on the
    first keystroke anyway. */
-.sn-critic-placeholder {
+.ms-critic-placeholder {
   display: inline-block;
   padding: 0 0.15em;
   margin: 0 0.1em;
@@ -469,8 +469,8 @@
 /* Repair mode. The raw markup is back on the line as prose-coloured text, so
    a faint wash over the whole construct — braces, comment body and all — says
    where markup ends and the sentence resumes. Weaker than
-   .sn-critic-highlight, so a real highlight stays the stronger object. */
-.sn-critic-revealed {
+   .ms-critic-highlight, so a real highlight stays the stronger object. */
+.ms-critic-revealed {
   background-color: color-mix(in srgb, var(--text-accent) 7%, transparent);
   border-radius: 2px;
 }
@@ -479,19 +479,19 @@
    into it and types, and the click that places the caret also focuses the
    drawer card as a side effect. An I-beam is what that deserves. Scoped to
    .cm-content because Reading view has no caret at all. */
-.cm-content .sn-critic-insertion,
-.cm-content .sn-critic-deletion,
-.cm-content .sn-critic-highlight {
+.cm-content .ms-critic-insertion,
+.cm-content .ms-critic-deletion,
+.cm-content .ms-critic-highlight {
   cursor: text;
 }
 
 /* Clicking a card scrolls the editor to its entry; this wash is what tells
    the eye where to land once it gets there. It is the text highlight itself
-   lit up — the same strip and radius as .sn-critic-highlight, animated from
+   lit up — the same strip and radius as .ms-critic-highlight, animated from
    a strong accent down to nothing — so the flash and the resting decoration
    are one object, not two boxes of different heights. The span then sits
    inert until the next flash replaces it. */
-@keyframes sn-critic-flash {
+@keyframes ms-critic-flash {
   from {
     background-color: color-mix(in srgb, var(--text-accent) 45%, transparent);
   }
@@ -500,9 +500,9 @@
   }
 }
 
-.sn-critic-flash {
+.ms-critic-flash {
   border-radius: 2px;
-  animation: sn-critic-flash 900ms ease-out;
+  animation: ms-critic-flash 900ms ease-out;
 }
 
 /* ─── Review drawer ───
@@ -513,26 +513,26 @@
    red quote already says "proposed deletion" and a word under it would be
    furniture. Screen readers get the same information from aria-label. */
 
-.sheet-review {
+.ms-review {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.sheet-review-header {
+.ms-review-header {
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--background-modifier-border);
   flex-shrink: 0;
 }
 
-.sheet-review-title-row {
+.ms-review-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.sheet-review-title {
+.ms-review-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-normal);
@@ -544,7 +544,7 @@
   white-space: nowrap;
 }
 
-.sheet-review-count {
+.ms-review-count {
   font-size: 11px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
@@ -552,7 +552,7 @@
   flex-shrink: 0;
 }
 
-.sheet-review-more {
+.ms-review-more {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -565,19 +565,19 @@
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.sheet-review-more:hover {
+.ms-review-more:hover {
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-.sheet-review-list {
+.ms-review-list {
   flex: 1;
   overflow-y: auto;
   padding: 4px 8px 20px;
 }
 
-/* Same geometry as .sheet-nav-file-card, so the two panels read as one plugin. */
-.sheet-review-card {
+/* Same geometry as .ms-nav-file-card, so the two panels read as one plugin. */
+.ms-review-card {
   position: relative;
   padding: 14px 10px 14px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
@@ -586,23 +586,23 @@
   transition: background-color 0.15s ease;
 }
 
-.sheet-review-card:last-child {
+.ms-review-card:last-child {
   border-bottom: none;
 }
 
-.sheet-review-card:hover,
-.sheet-review-card.is-focused {
+.ms-review-card:hover,
+.ms-review-card.is-focused {
   background-color: var(--background-modifier-hover);
 }
 
-.sheet-review-card:focus-visible {
+.ms-review-card:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: -2px;
 }
 
 /* The type indicator. Always on, unlike the navigator's hover-only bar —
    here it carries meaning rather than pointing at what you are hovering. */
-.sheet-review-card::before {
+.ms-review-card::before {
   content: '';
   position: absolute;
   left: 0;
@@ -613,15 +613,15 @@
   background: var(--text-accent);
 }
 
-.sheet-review-card[data-kind="insertion"]::before {
+.ms-review-card[data-kind="insertion"]::before {
   background: var(--color-green, #4caf50);
 }
 
-.sheet-review-card[data-kind="deletion"]::before {
+.ms-review-card[data-kind="deletion"]::before {
   background: var(--color-red, #e05252);
 }
 
-.sheet-review-card[data-kind="substitution"]::before {
+.ms-review-card[data-kind="substitution"]::before {
   background: var(--color-orange, #ff9800);
 }
 
@@ -629,7 +629,7 @@
    the manuscript. It separates "text from your book" from "text about your
    book" without needing a border or a second colour, and it keeps a
    strikethrough legible at this size. */
-.sheet-review-quote {
+.ms-review-quote {
   font-family: var(--font-monospace);
   font-size: 11.5px;
   line-height: 1.5;
@@ -640,7 +640,7 @@
 /* The surrounding line, shown when a comment has no anchor of its own. It is
    reference rather than content, so it sits one step back — but at --text-muted
    rather than --text-faint, which was illegible next to a full-contrast body. */
-.sheet-review-quote.is-context {
+.ms-review-quote.is-context {
   font-family: var(--font-text);
   font-size: 12px;
   color: var(--text-muted);
@@ -662,7 +662,7 @@
    before the click: an I-beam alone is easy to miss in a sidebar. The negative
    margin keeps the tinted box aligned with the text above it rather than
    inset by its own padding. */
-.sheet-review-comment {
+.ms-review-comment {
   font-family: var(--font-text);
   font-size: 13px;
   line-height: 1.5;
@@ -675,7 +675,7 @@
   border-radius: 4px;
 }
 
-.sheet-review-comment:hover {
+.ms-review-comment:hover {
   background-color: var(--background-modifier-hover);
 }
 
@@ -684,7 +684,7 @@
    note it stands in for and brings no chrome of its own. The placeholder is
    the only thing that marks an empty one — which is the state the comment
    command opens. Height comes from grow() in review-view.ts. */
-.sheet-review-comment-input {
+.ms-review-comment-input {
   display: block;
   width: 100%;
   margin-top: 6px;
@@ -701,20 +701,20 @@
   color: var(--text-normal);
 }
 
-.sheet-review-comment-input:focus,
-.sheet-review-comment-input:focus-visible {
+.ms-review-comment-input:focus,
+.ms-review-comment-input:focus-visible {
   border: none;
   outline: none;
   box-shadow: none;
 }
 
-.sheet-review-comment-input::placeholder {
+.ms-review-comment-input::placeholder {
   color: var(--text-faint);
 }
 
 /* Hidden until wanted, the way the navigator's drag handle is: forty cards
    should read as a column of prose, not a wall of buttons. */
-.sheet-review-actions {
+.ms-review-actions {
   display: flex;
   justify-content: flex-end;
   gap: 4px;
@@ -723,12 +723,12 @@
   transition: opacity 0.15s ease;
 }
 
-.sheet-review-card:hover .sheet-review-actions,
-.sheet-review-card:focus-within .sheet-review-actions {
+.ms-review-card:hover .ms-review-actions,
+.ms-review-card:focus-within .ms-review-actions {
   opacity: 1;
 }
 
-.sheet-review-action {
+.ms-review-action {
   font-size: 11.5px;
   padding: 3px 10px;
   border-radius: 5px;
@@ -740,22 +740,22 @@
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.sheet-review-action:hover {
+.ms-review-action:hover {
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-.sheet-review-action.is-primary {
+.ms-review-action.is-primary {
   color: var(--text-accent);
 }
 
-.sheet-review-action.is-primary:hover {
+.ms-review-action.is-primary:hover {
   background-color: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
   color: var(--text-accent-hover, var(--text-accent));
 }
 
 /* The one orchestrated moment: a decided card collapses and the list closes up. */
-.sheet-review-card.is-resolving {
+.ms-review-card.is-resolving {
   height: 0 !important;
   opacity: 0;
   padding-top: 0;
@@ -764,7 +764,7 @@
   transition: height 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
 }
 
-.sheet-review-empty {
+.ms-review-empty {
   padding: 18px 12px;
   font-size: 12.5px;
   color: var(--text-faint);
@@ -774,16 +774,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet-review-card,
-  .sheet-review-card.is-resolving,
-  .sheet-review-actions {
+  .ms-review-card,
+  .ms-review-card.is-resolving,
+  .ms-review-actions {
     transition: none;
   }
 }
 
 /* ─── Review count on navigator cards and toolbar ─── */
 
-.sheet-nav-title-line {
+.ms-nav-title-line {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -791,12 +791,12 @@
 
 /* Shares the row with the badge without changing how titles wrap — a long
    German scene title still runs onto a second line rather than being clipped. */
-.sheet-nav-title-line .sheet-nav-card-title {
+.ms-nav-title-line .ms-nav-card-title {
   flex: 1;
   min-width: 0;
 }
 
-.sheet-nav-card-badge {
+.ms-nav-card-badge {
   display: none;
   align-items: center;
   gap: 2px;
@@ -808,28 +808,28 @@
   font-variant-numeric: tabular-nums;
 }
 
-.sheet-nav-card-badge.is-visible {
+.ms-nav-card-badge.is-visible {
   display: inline-flex;
 }
 
-.sheet-nav-card-badge svg {
+.ms-nav-card-badge svg {
   width: 11px;
   height: 11px;
 }
 
-.sheet-nav-review-btn {
+.ms-nav-review-btn {
   position: relative;
 }
 
-.sheet-nav-review-btn.is-dimmed {
+.ms-nav-review-btn.is-dimmed {
   opacity: 0.35;
 }
 
-.sheet-nav-review-btn.is-active {
+.ms-nav-review-btn.is-active {
   color: var(--text-accent);
 }
 
-.sheet-nav-review-count {
+.ms-nav-review-count {
   position: absolute;
   top: 1px;
   right: 1px;
@@ -846,7 +846,7 @@
 }
 
 /* ─── Replace modal ─── */
-.sn-replace-original {
+.ms-replace-original {
   font-family: var(--font-monospace);
   font-size: 12px;
   color: var(--text-muted);

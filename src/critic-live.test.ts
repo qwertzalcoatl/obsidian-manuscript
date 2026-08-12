@@ -123,14 +123,14 @@ describe('Live Preview decorations — markers hidden, text styled', () => {
   it('hides an insertion\'s markers and underlines its text', () => {
     expect(visible('Sie {++leise ++}ging.')).toBe('Sie leise ging.');
     expect(paint('Sie {++leise ++}ging.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'leise ' })
+      expect.objectContaining({ cls: 'ms-critic-insertion', text: 'leise ' })
     );
   });
 
   it('strikes a deletion', () => {
     expect(visible('Sie ging{-- fort--}.')).toBe('Sie ging fort.');
     expect(paint('Sie ging{-- fort--}.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-deletion', text: ' fort' })
+      expect.objectContaining({ cls: 'ms-critic-deletion', text: ' fort' })
     );
   });
 
@@ -139,16 +139,16 @@ describe('Live Preview decorations — markers hidden, text styled', () => {
     expect(visible(doc)).toBe('Das kalte→fahle Licht.');
     const marks = paint(doc);
     expect(marks).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-deletion', text: 'kalte' })
+      expect.objectContaining({ cls: 'ms-critic-deletion', text: 'kalte' })
     );
     expect(marks).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'fahle' })
+      expect.objectContaining({ cls: 'ms-critic-insertion', text: 'fahle' })
     );
   });
 
   it('tints a highlight', () => {
     expect(paint('Sie {==ging==} fort.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-highlight', text: 'ging' })
+      expect.objectContaining({ cls: 'ms-critic-highlight', text: 'ging' })
     );
   });
 
@@ -169,18 +169,18 @@ describe('Live Preview decorations — native ~~ strikethrough is cancelled', ()
 
   it('marks the whole substitution, markers included', () => {
     expect(paint(doc)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-substitution', text: '{~~kalte~>fahle~~}' })
+      expect.objectContaining({ cls: 'ms-critic-substitution', text: '{~~kalte~>fahle~~}' })
     );
   });
 
   it('keeps the construct mark with the cursor inside', () => {
     expect(paint(doc, 6)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-substitution', text: '{~~kalte~>fahle~~}' })
+      expect.objectContaining({ cls: 'ms-critic-substitution', text: '{~~kalte~>fahle~~}' })
     );
   });
 
   it('does not mark other kinds, whose bodies Markdown leaves alone', () => {
-    expect(paint('Sie {--ging--}.').map((d) => d.cls)).not.toContain('sn-critic-substitution');
+    expect(paint('Sie {--ging--}.').map((d) => d.cls)).not.toContain('ms-critic-substitution');
   });
 });
 
@@ -205,13 +205,13 @@ describe('Live Preview decorations — the caret never reveals markup', () => {
 
   it('paints no wash from the cursor alone', () => {
     expect(paint('Sie {++leise ++}ging.', 8).map((d) => d.cls)).not.toContain(
-      'sn-critic-revealed'
+      'ms-critic-revealed'
     );
   });
 
   it('keeps styling the text, so the edit stays legible while typing in it', () => {
     expect(paint('Sie {++leise ++}ging.', 8)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-insertion', text: 'leise ' })
+      expect.objectContaining({ cls: 'ms-critic-insertion', text: 'leise ' })
     );
   });
 });
@@ -228,13 +228,13 @@ describe('Live Preview decorations — the unfold effect reveals markup', () => 
 
   it('washes the whole construct, braces and all', () => {
     expect(paintUnfolded(doc, 8)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{++leise ++}' })
+      expect.objectContaining({ cls: 'ms-critic-revealed', text: '{++leise ++}' })
     );
   });
 
   it('washes a revealed comment, braces and body alike', () => {
     expect(paintUnfolded('Sie ging.{>>warum?<<}', 12)).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-revealed', text: '{>>warum?<<}' })
+      expect.objectContaining({ cls: 'ms-critic-revealed', text: '{>>warum?<<}' })
     );
   });
 
@@ -331,7 +331,7 @@ describe('Live Preview decorations — flash after a card click', () => {
       effects: flashEffect.of({ ranges: [{ from: 4, to: 14 }], key: 1 }),
     }).state;
     expect(flashed(state)).toEqual([
-      expect.objectContaining({ cls: 'sn-critic-flash', text: '{--ging--}' }),
+      expect.objectContaining({ cls: 'ms-critic-flash', text: '{--ging--}' }),
     ]);
   });
 
@@ -340,7 +340,7 @@ describe('Live Preview decorations — flash after a card click', () => {
       .update({ effects: flashEffect.of({ ranges: [{ from: 4, to: 14 }], key: 1 }) })
       .state.update({ effects: flashEffect.of({ ranges: [{ from: 15, to: 20 }], key: 2 }) }).state;
     expect(flashed(state)).toEqual([
-      expect.objectContaining({ cls: 'sn-critic-flash', text: 'fort.' }),
+      expect.objectContaining({ cls: 'ms-critic-flash', text: 'fort.' }),
     ]);
   });
 
@@ -349,7 +349,7 @@ describe('Live Preview decorations — flash after a card click', () => {
       .update({ effects: flashEffect.of({ ranges: [{ from: 4, to: 14 }], key: 1 }) })
       .state.update({ changes: { from: 0, insert: 'Neu. ' } }).state;
     expect(flashed(state)).toEqual([
-      expect.objectContaining({ cls: 'sn-critic-flash', text: '{--ging--}' }),
+      expect.objectContaining({ cls: 'ms-critic-flash', text: '{--ging--}' }),
     ]);
   });
 });
@@ -395,7 +395,7 @@ describe('Live Preview decorations — after an edit', () => {
     const marks = painted(after, after.doc.toString());
 
     expect(marks).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-deletion', text: 'ging' })
+      expect.objectContaining({ cls: 'ms-critic-deletion', text: 'ging' })
     );
   });
 
@@ -584,7 +584,7 @@ describe('Live Preview decorations — a construct carrying a note', () => {
   it('marks a commented deletion', () => {
     expect(paint('Sie {--ging--}{>>zu spät?<<} fort.')).toContainEqual(
       expect.objectContaining({
-        cls: 'sn-critic-has-comment',
+        cls: 'ms-critic-has-comment',
         text: '{--ging--}{>>zu spät?<<}',
       })
     );
@@ -592,19 +592,19 @@ describe('Live Preview decorations — a construct carrying a note', () => {
 
   it('marks a commented annotation', () => {
     expect(paint('Sie {==ging==}{>>warum?<<} fort.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-has-comment' })
+      expect.objectContaining({ cls: 'ms-critic-has-comment' })
     );
   });
 
   it('leaves an uncommented construct of the same kind unmarked', () => {
     expect(paint('Sie {--ging--} fort.').map((d) => d.cls)).not.toContain(
-      'sn-critic-has-comment'
+      'ms-critic-has-comment'
     );
   });
 
   it('does not mark a standalone comment, which has no anchor to mark', () => {
     expect(paint('Sie ging.{>>warum?<<}').map((d) => d.cls)).not.toContain(
-      'sn-critic-has-comment'
+      'ms-critic-has-comment'
     );
   });
 });
@@ -663,7 +663,7 @@ describe('suggestChange — the caret lands somewhere it can rest', () => {
 describe('Live Preview decorations — the substitution arrow', () => {
   it('replaces the ~> marker rather than hiding it', () => {
     expect(paint('Das {~~kalte~>fahle~~} Licht.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-arrow', text: '~>' })
+      expect.objectContaining({ cls: 'ms-critic-arrow', text: '~>' })
     );
   });
 
@@ -672,12 +672,12 @@ describe('Live Preview decorations — the substitution arrow', () => {
     // generated content hung off the replacement would vanish exactly while
     // the replacement is being written.
     expect(paint('Das {~~kalte~>~~} Licht.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-arrow', text: '~>' })
+      expect.objectContaining({ cls: 'ms-critic-arrow', text: '~>' })
     );
   });
 
   it('leaves an insertion alone, which has no arrow', () => {
-    expect(paint('Sie {++leise ++}ging.').map((d) => d.cls)).not.toContain('sn-critic-arrow');
+    expect(paint('Sie {++leise ++}ging.').map((d) => d.cls)).not.toContain('ms-critic-arrow');
   });
 });
 
@@ -718,25 +718,25 @@ describe('emptyBodyOf — where the words are going to go', () => {
 describe('Live Preview decorations — the placeholder', () => {
   it('stands where an empty insertion would be typed', () => {
     expect(paint('Sie {++++}ging.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-placeholder', from: 7, to: 7 })
+      expect.objectContaining({ cls: 'ms-critic-placeholder', from: 7, to: 7 })
     );
   });
 
   it('stands after the arrow of an empty replacement', () => {
     expect(paint('Das {~~kalte~>~~} Licht.')).toContainEqual(
-      expect.objectContaining({ cls: 'sn-critic-placeholder', from: 14, to: 14 })
+      expect.objectContaining({ cls: 'ms-critic-placeholder', from: 14, to: 14 })
     );
   });
 
   it('is gone as soon as there is text', () => {
     expect(paint('Sie {++leise ++}ging.').map((d) => d.cls)).not.toContain(
-      'sn-critic-placeholder'
+      'ms-critic-placeholder'
     );
   });
 
   it('is gone in repair mode, where the braces are on screen instead', () => {
     expect(paintUnfolded('Sie {++++}ging.', 7).map((d) => d.cls)).not.toContain(
-      'sn-critic-placeholder'
+      'ms-critic-placeholder'
     );
   });
 });
