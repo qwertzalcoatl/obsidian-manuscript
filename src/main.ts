@@ -1650,10 +1650,17 @@ export default class ManuscriptPlugin extends Plugin {
   /**
    * Wraps the selection in markup and opens the drawer.
    *
-   * A comment is the one kind whose content is not manuscript text, so it is
-   * the one kind that takes the caret with it: the note is typed on its card,
-   * with the drawer focused and the field already open. The other three leave
-   * the caret in the sentence, which is where writing carries on.
+   * A comment and a suggested cut are the two kinds that ask a question of the
+   * writer, so they take the caret with it: the note is typed on the card, with
+   * the drawer focused and the field already open. Proposing to strike a
+   * sentence without saying why is half a remark, and the note field is where
+   * the other half goes. Abandoning it costs nothing — setComment removes an
+   * empty note, leaving the bare mark.
+   *
+   * A highlight and an addition leave the caret in the sentence, which is where
+   * writing carries on. A highlight in particular has to stay silent: prompt
+   * for a note and it becomes Comment on selection, and marking a passage
+   * without being asked to justify it stops being possible.
    */
   private async wrapSelection(editor: Editor, kind: MarkupKind): Promise<void> {
     const selection = editor.getSelection();
@@ -1663,7 +1670,7 @@ export default class ManuscriptPlugin extends Plugin {
     const [open, close] = WRAPPERS[kind];
     editor.replaceSelection(`${open}${selection}${close}`);
 
-    if (kind === "comment") await this.startNote(start);
+    if (kind === "comment" || kind === "deletion") await this.startNote(start);
     else await this.activateReviewView(false);
   }
 
@@ -1748,9 +1755,10 @@ export default class ManuscriptPlugin extends Plugin {
    * Opens the Review drawer in the right sidebar.
    *
    * `focus` is false when a command created markup: the caret should stay in
-   * the manuscript, with the drawer merely visible. A comment inverts that and
-   * does not come through here — its content is not manuscript text, so the
-   * caret follows it into the drawer. See startNote.
+   * the manuscript, with the drawer merely visible. A comment and a suggested
+   * cut invert that and do not come through here — each wants a note that is
+   * not manuscript text, so the caret follows it into the drawer. See
+   * wrapSelection and startNote.
    */
   async activateReviewView(focus = true): Promise<void> {
     const { workspace } = this.app;

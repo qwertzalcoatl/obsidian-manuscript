@@ -97,8 +97,8 @@ Every construct has a command, so the whole format is reachable from the command
 | Command | Needs a selection | Writes |
 |---|---|---|
 | Comment on selection — `⌘⇧M` | yes | `{==Text==}`, then the drawer opens with the caret in its note field |
-| Highlight selection | yes | `{==Text==}` |
-| Suggest deletion | yes | `{--Text--}` |
+| Highlight selection | yes | `{==Text==}`, silently — the caret stays in the sentence |
+| Suggest deletion | yes | `{--Text--}`, then the drawer opens with the caret in its note field |
 | Suggest a change | no | with a selection `{~~alt~>neu~~}`, without one `{++Text++}` — either way you type the new wording in the manuscript |
 | Accept all markup in this note | no | resolves everything, keeping the suggestions |
 | Reject all markup in this note | no | resolves everything, turning them all down |
@@ -106,6 +106,8 @@ Every construct has a command, so the whole format is reachable from the command
 | Open review panel | no | — |
 
 The right-click menu carries **Comment on selection**, **Highlight selection**, **Suggest deletion** and **Suggest as addition** — the last of which marks text already written as a proposed addition and has no command of its own, since everywhere else a selection means *here is what I am changing*. Nothing in your note is ever modified unless you invoke one of these.
+Proposing a cut asks a question of the writer, so *Suggest deletion* takes the caret into the note field the way a comment does. Leave the field empty and the mark simply stays as it is, unannotated.
+
 
 ### Known limitations
 
