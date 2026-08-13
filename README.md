@@ -1,189 +1,138 @@
 # Manuscript
 
-A single-column, drill-down sidebar for [Obsidian](https://obsidian.md) — built for writers who organize novels, screenplays, and long-form projects in folders and numbered files.
+A single-column, drill-down sidebar for [Obsidian](https://obsidian.md), plus an
+editorial review pass built on [CriticMarkup](http://criticmarkup.com).
 
-Browse your vault one level at a time: chapters show as cards with note counts, scenes show content previews. Click a scene to open it. Mark up a draft with suggestions and comments, then work through them in a side drawer.
+## What is this for?
 
-## Features
+Writers who keep a long project in folders and numbered files — novels,
+screenplays, reports — and whose vault sidebar shows them everything at once
+when they only want the chapter they are in.
 
-- **Drill-down navigation** — single-column view, one level at a time
-- **Content previews** — each note card shows the first few lines of text
-- **Smart name parsing** — extracts chapter numbers and titles from filenames like `1 – Die Preisverleihung` or `3 - Chapter Three`
-- **Drag-and-drop reordering** — reorder scenes and chapters by dragging; items are renumbered sequentially (opt-in via settings)
-- **New note button** — creates the next numbered note in the current folder (`Cmd+N`)
-- **Right-click context menu** — rename or delete files and folders
-- **Active note highlight** — the currently open note is highlighted in the sidebar
-- **Live updates** — the list refreshes when files are created, renamed, or modified
-- **Editorial review** — suggest edits and leave comments in CriticMarkup, then accept or reject them one at a time from a side drawer
-- **Archive** — move cut text out of a chapter into an append-only archive file that stays attached to it
+Manuscript replaces that with one column that goes a level at a time: folders
+appear as chapter cards with note counts, notes as cards with a preview of their
+first lines. On top of it sits a review workflow: mark a draft up with
+suggestions and comments, then walk through them one by one in a side drawer.
 
-## How it works
+## How to use this
 
-Open the navigator from the **ribbon icon** (layers) or the command palette ("Open Manuscript").
+### 1. Browse
 
-The navigator shows the contents of the current folder. Folders appear as chapter cards with note counts and a drill-in chevron. Notes appear as cards with a title and content preview.
+Open the navigator from the **ribbon icon** (layers) or the command palette
+("Open Manuscript"). Click a chapter to drill in, a note to open it, the
+chevron to go back up. `Cmd+N` creates the next numbered note in the current
+folder; right-click renames or deletes.
 
-### Filename-based ordering
-
-Numbered items come first in numeric order, then everything else alphabetically. Use numeric prefixes to control order:
+Numbered items sort first in numeric order, everything else alphabetically:
 
 ```
-1 – Prolog.md
-2 – Die Nachricht.md
+1 – Opening.md
+2 – The Arrival.md
 3.md
 99 – Notes.md
 ```
 
-### Drag-and-drop reordering
+Turn on **Enable ordering** in settings to get drag handles. Dropping renumbers
+the folder sequentially (1, 2, 3…), keeping each item's title and separator.
+Items without a number keep their filename and stay at the end — dragging one
+into the numbered run is what gives it a number. Folders and notes are numbered
+as separate sequences.
 
-Enable **Settings > Manuscript > Enable ordering** to show drag handles. Dragging and dropping renumbers the folder sequentially (1, 2, 3…), preserving each item's title and its choice of separator.
+### 2. Mark up a draft
 
-Items **without** a number are left alone — they keep their exact filename and sort to the end of the list. Dragging an unnumbered item into the numbered run is the one action that gives it a number.
-
-Folders and notes are numbered as separate sequences, so dragging a note onto a chapter folder is refused rather than producing two items that share a number.
-
-## Editorial review
-
-An editorial pass on a chapter is a round trip: the text gets marked up, then you walk the marks and decide. Manuscript stores those marks as [CriticMarkup](http://criticmarkup.com) — plain text in the note itself, no sidecar database — and shows them in a **Review** drawer for the sheet you have open.
-
-The workflow this is built for: ask Claude (or any assistant) to *"review chapter 3 and mark it up in CriticMarkup"*, then open the drawer and work through what comes back.
-
-### The five marks
-
-Three of them propose an edit, so they have two possible outcomes:
+Ask an assistant to *"review chapter 3 and mark it up in CriticMarkup"*, or
+write the marks yourself from the command palette (`⌘P`) or the right-click
+menu. Three marks propose an edit:
 
 | Written | Means | Accept | Reject |
 |---|---|---|---|
-| `{++neuer Text++}` | insertion | keeps the text | drops it |
-| `{--alter Text--}` | deletion | removes the text | keeps it |
-| `{~~alt~>neu~~}` | substitution | writes `neu` | keeps `alt` |
+| `{++new text++}` | insertion | keeps the text | drops it |
+| `{--old text--}` | deletion | removes the text | keeps it |
+| `{~~old~>new~~}` | substitution | writes `new` | keeps `old` |
 
-The other two are annotations. They have one outcome, so they only offer **Resolve**:
+Two are annotations, so they only offer **Resolve**:
 
 | Written | Means | Resolve |
 |---|---|---|
-| `{==Text==}` | highlight | unwraps it, leaving the text |
-| `{>>Kommentar<<}` | comment | deletes it |
+| `{==text==}` | highlight | unwraps it, leaving the text |
+| `{>>comment<<}` | comment | deletes it |
 
-A `{>>Kommentar<<}` written directly after another mark belongs to it and shares its card. Deciding that mark takes the comment with it — the decision is made, so the note about it is moot.
+A `{>>comment<<}` written directly after another mark belongs to it and shares
+its card. Obsidian's own `%%comment%%` and `==text==%%comment%%` are read too; a
+plain `==text==` is ordinary markdown and is left alone.
 
-Obsidian's own syntax is read too: `%%Kommentar%%` is a standalone comment, and `==Text==%%Kommentar%%` is a commented highlight. A plain `==Text==` on its own is left alone — that's ordinary markdown, not an editorial mark.
+The commands you will reach for:
 
-### Editing a marked-up draft
+| Command | Needs a selection |
+|---|---|
+| Comment on selection — `⌘⇧M` | yes |
+| Highlight selection | yes |
+| Suggest deletion | yes |
+| Suggest a change | no — with a selection it replaces, without one it inserts |
+| Insert editorial comment | no |
 
-Marked-up prose is prose you edit in place. Click into it and type — the syntax stays out of the way, and you never have to settle a suggestion just to gain typing access to the words around it. Arrow keys step over the hidden markers in one press rather than stalling on characters that aren't there, and a Backspace that would break a mark selects the whole thing first, so a construct cannot quietly degrade into plain text.
+Marked-up prose stays editable in place: the syntax is hidden, you type around
+it, and nothing is settled just to reach the words nearby. **Show markup source
+at cursor** unfolds one mark for hand repair and folds it back when you leave.
 
-Comments live in the drawer, not in the prose — and they are written there too. A mark carrying one is drawn with a dotted underline; the note itself is on its card, where you click it to write or change it. A comment with no text anchored to it — one Claude left on a line of its own, say — shows in the drawer and the mark count but nowhere on the page.
+### 3. Work through the pass
 
-A change you have started but not written into shows a faint green *insert…* where the words go, washed the way marked text is — because that is what it is, something you type over. Type and it gives way; press `Escape` and the whole construct does.
+Open the drawer from the **Review button** in the toolbar or the command
+palette. Each mark is a card showing the change itself — struck through for a
+deletion, underlined for an insertion. Click a card to jump to it; click its
+note to write or edit one (`⌘↵` commits, `Escape` cancels).
 
-If a mark ever needs repairing by hand, **Show markup source at cursor** unfolds the one under the caret, braces and all. It folds itself back when you move away. That command is the only thing in the plugin that puts syntax on screen.
-
-### Working through a pass
-
-Open the drawer from the **Review button** in the navigator toolbar, or the command palette. Each mark becomes a card showing the affected text as the change itself: struck through for a deletion, underlined for an insertion. Click a card to jump to it in the editor.
-
-- **Click a card's note** to write or change it; `⌘↵` or clicking away commits, `Escape` cancels. A note cleared to nothing is removed, and a card with no note yet offers one from its actions row.
 - **Accept / Reject** decide a suggestion
 - **Resolve** clears a highlight or comment, leaving the text
-- **⋯ → Accept all / Reject all** settles the whole note in one step; either way the highlights and comments go too
+- **⋯ → Accept all / Reject all** settles the whole note at once
 
-Every action is written through the editor, so **⌘Z undoes it** like any other edit.
+Every action goes through the editor, so **⌘Z undoes it** like any other edit.
 
-### Marking up by hand
+## Editorial comments
 
-Every construct has a command, so the whole format is reachable from the command palette (`⌘P`). Typing *suggest* brings up the three suggestion types together; typing *markup* brings up the whole-note actions.
-
-| Command | Needs a selection | Writes |
-|---|---|---|
-| Comment on selection — `⌘⇧M` | yes | `{==Text==}`, then the drawer opens with the caret in its note field |
-| Highlight selection | yes | `{==Text==}`, silently — the caret stays in the sentence |
-| Suggest deletion | yes | `{--Text--}`, then the drawer opens with the caret in its note field |
-| Suggest a change | no | with a selection `{~~alt~>neu~~}`, without one `{++Text++}` — either way you type the new wording in the manuscript |
-| Accept all markup in this note | no | resolves everything, keeping the suggestions |
-| Reject all markup in this note | no | resolves everything, turning them all down |
-| Insert editorial comment | no | a callout block for an observation about the passage, with the caret in it |
-| Show markup source at cursor | no | unfolds the mark under the caret for repair |
-| Open review panel | no | — |
-
-Proposing a cut asks a question of the writer, so *Suggest deletion* takes the caret into the note field the way a comment does. Leave the field empty and the mark simply stays as it is, unannotated.
-
-The right-click menu carries **Comment on selection**, **Highlight selection**, **Suggest deletion** and **Suggest as addition** — the last of which marks text already written as a proposed addition and has no command of its own, since everywhere else a selection means *here is what I am changing*. Nothing in your note is ever modified unless you invoke one of these.
-
-### Observations about a passage
-
-Every mark above is attached to characters, and says *change these, accept it or reject it*. The remark an editor writes most often is not that:
-
-> Dieser Absatz funktioniert noch nicht. Nells Nervosität kommt nicht raus.
-
-That is prose *about* the manuscript, and it belongs to a passage rather than to a word. **Insert editorial comment** writes it as a block standing in the text:
+An observation belongs to a passage, not to a word, so it is not a mark.
+**Insert editorial comment** writes a callout that stands in the text:
 
 ```markdown
 > [!editorial] Editorial comment
-> Dieser Absatz funktioniert noch nicht. Nells Nervosität kommt nicht raus.
+> This paragraph is not working yet.
 ```
 
-At the top of a sheet it reads as editorial frontmatter; between two scenes it comments on the scene it follows. It is the same block either way — only the placement differs. It renders in Live Preview and Reading view alike, folds, and holds as many paragraphs and lists as the thought needs.
-
-It appears in the drawer as a card among the marks, in document order, and clicking it jumps there. The card carries **no Accept, Reject or Resolve**, and no note field: an editorial comment is not an edit, so there is nothing to settle. You delete it in the manuscript once the passage has been fixed.
-
-For the same reason **Accept all** and **Reject all leave editorial comments standing**. A manuscript with every mark settled still carries the observations you have not answered yet, which is the point of writing them down.
-
-### Known limitations
-
-- A mark may wrap across a soft line break but not across a blank line, so there are no multi-paragraph anchors. This also stops a stray `{++` from swallowing the rest of the note when it eventually meets a `++}`.
-- Marks do not nest. `{==a {==b==} c==}` closes at the first `==}`.
-- A selection containing `~>` or `~~}` cannot become a replacement: the format has no escape syntax, so the construct would split in the wrong place or close early. The command says so and writes nothing.
-- A note may run to several lines but cannot hold a blank line or its own `<<}` — CriticMarkup has no escape syntax, so a blank line would end the mark and `<<}` would close it early. Both are defused as the note is written, and what the card shows afterwards is what was stored.
-- **Accept all** / **Reject all** rewrite everything between the first and last mark in one edit, so the cursor can move if it was sitting between them. Deciding marks one at a time leaves the cursor exactly where it was.
-- `{--alt--}{++neu++}` is read as two separate marks, not as one substitution. Use `{~~alt~>neu~~}` for that.
-- Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
-- Every line of an editorial comment needs its own `>`. A line without one ends the block, and everything after it is ordinary prose again — which is also where Obsidian stops drawing the callout.
-- **Archive selection** does not know about editorial comments. A selection cutting through one archives the fragment it covers, the same way it would cut a mark in half.
-- In Reading view, only CriticMarkup renders. Obsidian removes `%%comments%%` from the page before any plugin can see them, so those stay invisible there — exactly as they are without this plugin.
+At the top of a note it reads as editorial frontmatter; between two scenes it
+comments on the scene it follows. It appears in the drawer in document order
+with no Accept, Reject or Resolve — there is nothing to settle. **Accept all**
+and **Reject all** leave these standing; you delete them once the passage is
+fixed.
 
 ## Archiving cut text
 
-A paragraph that is wrong *here* is often not wrong at all. **Archive selection**
-moves it out of the chapter and into an archive beside the manuscript, so
-cutting does not mean choosing between deleting and living with it.
+A paragraph that is wrong *here* is often not wrong at all. **Archive
+selection** moves it out of the note and into an archive file beside it, so
+cutting is not a choice between deleting and living with it.
 
-Set an archive folder in **Settings > Manuscript** first — archiving refuses
-until you do. Each note then gets one archive file, mirroring its path:
+Set an archive folder in **Settings > Manuscript** first. Each note then gets
+one archive file mirroring its path, and every cut is appended under a
+timestamp:
 
 ```
-Manuskript/Kapitel 3/3 – Die Nachricht.md
-  →  Archiv/Manuskript/Kapitel 3/3 – Die Nachricht.md
+Book/Chapter 3/3 – The Arrival.md  →  Archive/Book/Chapter 3/3 – The Arrival.md
 ```
 
-Every cut from that chapter is appended to that one file under a timestamp:
-
-```markdown
----
-origin: "[[Manuskript/Kapitel 3/3 – Die Nachricht]]"
----
-
-## 2026-08-12 14:32
-
-Der erste gestrichene Absatz …
-
-## 2026-08-12 16:05
-
-Und noch einer …
-```
-
-The `origin` link is how an archive knows its chapter, and it is a link rather
-than a filename on purpose: reordering renumbers your files, and Obsidian
-rewrites links when it does. Renumber a chapter and its archive stays attached
-— under its old filename, which is now merely stale rather than wrong.
-
-The command is in the palette and in the right-click menu, and it needs a
-selection. A selection that cuts through a suggestion or comment is widened to
-take the whole mark, so archiving can never tear a construct in half.
-
-**The archive is append-only.** Nothing in this plugin ever deletes from an
-archive file or moves an entry back out. One consequence is worth knowing:
+The archive links back to its source with an `origin` link rather than a
+filename, because reordering renumbers files and Obsidian rewrites links when it
+does. **The archive is append-only** — nothing here ever deletes from it, so
 `⌘Z` puts the text back in your chapter but leaves the archived copy in place.
+
+## Known limitations
+
+- Marks do not nest, and none may span a blank line — no multi-paragraph anchors.
+- CriticMarkup has no escape syntax, so a selection containing `~>` or `~~}`
+  cannot become a substitution, and a note cannot contain a blank line or `<<}`.
+- **Accept all** / **Reject all** rewrite everything between the first and last
+  mark in one edit, so the cursor can move. Deciding marks one at a time does not.
+- Whitespace left behind by a resolved mark is yours to tidy.
+- In Reading view only CriticMarkup renders — Obsidian strips `%%comments%%`
+  before any plugin sees them.
 
 ## Settings
 
@@ -192,23 +141,17 @@ archive file or moves an entry back out. One consequence is worth knowing:
 | Setting | Default | Effect |
 |---|---|---|
 | Enable ordering | off | Shows drag handles and renumbers folders on drop |
-| Enable review | on | Renders CriticMarkup inline and enables the Review drawer and its commands. With it off, marks are left as plain text. Obsidian needs a reload for this to take full effect. |
+| Enable review | on | Renders CriticMarkup inline and enables the Review drawer. Off leaves marks as plain text. Needs a reload to take full effect. |
 | Archive folder | empty | Where **Archive selection** puts cut text. Empty disables archiving. |
 
 ## Installation
 
-### From Obsidian Community Plugins
+**From Community Plugins:** Settings > Community plugins > Browse, search for
+"Manuscript", Install, Enable.
 
-1. Open **Settings > Community plugins > Browse**
-2. Search for "Manuscript"
-3. Click **Install**, then **Enable**
-
-### Manual
-
-1. Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](../../releases/latest)
-2. Create a folder `manuscript` in your vault's `.obsidian/plugins/` directory
-3. Copy the three files into it
-4. Enable the plugin in **Settings > Community plugins**
+**Manually:** download `main.js`, `styles.css` and `manifest.json` from the
+[latest release](../../releases/latest) into `.obsidian/plugins/manuscript/`,
+then enable the plugin.
 
 ## Development
 
