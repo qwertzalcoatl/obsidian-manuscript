@@ -378,6 +378,30 @@
   text-align: center;
 }
 
+/* ─── Editorial comments ───
+   A block of prose *about* the manuscript, standing in it. Obsidian draws the
+   callout; this only sets the register. Deliberately quiet — muted, smaller,
+   no accent colour — because it has to read as apparatus beside the text
+   rather than as a warning interrupting it, and because the manuscript is what
+   the eye should return to. */
+
+.callout[data-callout="editorial"] {
+  --callout-color: var(--mono-rgb-100);
+  --callout-icon: lucide-pencil;
+  background-color: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-left-width: 3px;
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+
+.callout[data-callout="editorial"] .callout-title {
+  font-size: var(--font-ui-smaller);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
 /* ─── Inline editorial markup ───
    The change is shown as the change, not as a labelled badge: struck through
    for a deletion, underlined for an insertion. Text keeps its normal colour —
@@ -623,6 +647,36 @@
 
 .ms-review-card[data-kind="substitution"]::before {
   background: var(--color-orange, #ff9800);
+}
+
+/* An editorial comment is not one of the five constructs, and its bar says so
+   by being the one that is not a colour: this row is prose about the passage
+   rather than an edit waiting on a decision. */
+.ms-review-card[data-kind="editorial"]::before {
+  background: var(--text-muted);
+}
+
+.ms-review-editorial-title {
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+/* Clamped rather than truncated when the card was built, so the whole comment
+   is still there to select and copy. Four lines is enough to recognise which
+   observation this is without turning the drawer into a reading view. */
+.ms-review-editorial-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--font-ui-small);
+  line-height: 1.45;
+  color: var(--text-normal);
+  white-space: pre-wrap;
 }
 
 /* Monospace because the quote *is* typescript — text lifted verbatim out of

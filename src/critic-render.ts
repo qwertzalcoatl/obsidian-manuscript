@@ -539,7 +539,21 @@ let flashKey = 0;
  * timer, and immune to the races one invites when clicks come quickly.
  */
 export function flashEntry(view: EditorView, entry: Entry): void {
-  const ranges = flashRangesFor(entry, view.state.doc.length);
+  flash(view, flashRangesFor(entry, view.state.doc.length));
+}
+
+/**
+ * The same wash over a plain range, for what the drawer shows that is not a
+ * CriticMarkup entry — an editorial comment has no spans to derive a band from,
+ * only its own bounds.
+ */
+export function flashRange(view: EditorView, from: number, to: number): void {
+  const len = view.state.doc.length;
+  const clamped = { from: Math.min(from, len), to: Math.min(to, len) };
+  flash(view, clamped.from < clamped.to ? [clamped] : []);
+}
+
+function flash(view: EditorView, ranges: Range[]): void {
   if (ranges.length === 0) return;
   view.dispatch({ effects: flashEffect.of({ ranges, key: flashKey++ }) });
 }

@@ -29,6 +29,7 @@ import {
   timestamp,
 } from "./archive";
 import { parseCritic, renderAccepted, renderRejected, suggestChange } from "./critic";
+import { editorialInsertion } from "./editorial";
 import {
   criticEditorExtension,
   criticField,
@@ -1612,6 +1613,37 @@ export default class ManuscriptPlugin extends Plugin {
           editor.setCursor(editor.offsetToPos(from + change.caret));
         }
 
+        void this.activateReviewView(false);
+      },
+    });
+
+    // Editorial prose rather than a mark on a span: no anchor, nothing to
+    // accept, and it leaves when the passage it complains about is fixed. It
+    // is a callout rather than a sixth construct because CriticMarkup has no
+    // way to say "about this passage" — see the design spec of 2026-08-13.
+    this.addCommand({
+      id: "insert-editorial-comment",
+      name: "Insert editorial comment",
+      editorCallback: (editor) => {
+        const at = editor.posToOffset(editor.getCursor("from"));
+        const edit = editorialInsertion(editor.getValue(), at);
+
+        // One transaction, for the reason Suggest a change gives above: with
+        // two dispatches, anything landing between them can leave the caret
+        // outside what was just written — here, in the manuscript rather than
+        // in the callout body.
+        const cm = (editor as unknown as { cm?: CmEditorView }).cm;
+        if (cm) {
+          cm.dispatch({
+            changes: { from: edit.at, insert: edit.text },
+            selection: { anchor: edit.caret },
+          });
+        } else {
+          editor.replaceRange(edit.text, editor.offsetToPos(edit.at));
+          editor.setCursor(editor.offsetToPos(edit.caret));
+        }
+
+        // Visible, not focused: the words are typed where they were written.
         void this.activateReviewView(false);
       },
     });

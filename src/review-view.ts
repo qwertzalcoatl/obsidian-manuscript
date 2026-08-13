@@ -11,6 +11,7 @@ import {
   Menu,
   Notice,
   Platform,
+  Scope,
   TFile,
   WorkspaceLeaf,
   setIcon,
@@ -25,8 +26,26 @@ import {
   type Entry,
   type Mode,
 } from './critic';
+import { parseEditorial, type EditorialBlock } from './editorial';
 import type { EditorView as CmEditorView } from '@codemirror/view';
-import { flashEntry } from './critic-render';
+import { flashEntry, flashRange } from './critic-render';
+
+/**
+ * One line of the drawer.
+ *
+ * `type` rather than `kind`: `kind` already means a CriticMarkup construct
+ * everywhere else in this codebase, and a row is a different axis. A mark and
+ * an editorial comment share the list and nothing else — one is an edit to
+ * settle, the other is prose about the passage.
+ */
+type Row =
+  | { type: 'mark'; card: Card }
+  | { type: 'editorial'; block: EditorialBlock };
+
+/** Where a row begins in the sheet, which is also what its card is stamped with. */
+function rowFrom(row: Row): number {
+  return row.type === 'mark' ? row.card.entry.from : row.block.from;
+}
 
 export const VIEW_TYPE_REVIEW = 'manuscript-review';
 
@@ -92,6 +111,14 @@ export class ReviewView extends ItemView {
   private headerEl!: HTMLElement;
   private listEl!: HTMLElement;
   private cards: Card[] = [];
+  /**
+   * Editorial comments, kept beside the marks rather than among them.
+   *
+   * Two lists because there are two parsers: parseCritic stays pure
+   * CriticMarkup and never learns about callouts, which is also why an
+   * editorial comment cannot reach the toolbar count.
+   */
+  private blocks: EditorialBlock[] = [];
   private file: TFile | null = null;
   private refreshTimer: number | null = null;
   /**
@@ -110,9 +137,63 @@ export class ReviewView extends ItemView {
    * then is there a card to type into.
    */
   private editing: { offset: number; draft: string } | null = null;
+  /** Pushed while a note field is open, so ⌘↵ reaches it. See claimSubmitKey. */
+  private submitScope: Scope | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
+  }
+
+  /**
+   * The one way to open and close a note field.
+   *
+   * Every assignment goes through here so the scope below cannot be left
+   * pushed: a field is open exactly when `editing` is set, and the claim on ⌘↵
+   * lasts exactly that long. Balancing it on the textarea's blur instead looks
+   * equivalent and is not — removing a focused element from the document fires
+   * no blur, and committing a note does precisely that, by way of the repaint.
+   */
+  private setEditing(next: { offset: number; draft: string } | null): void {
+    this.editing = next;
+    if (next === null) this.releaseSubmitKey();
+    else this.claimSubmitKey();
+  }
+
+  /**
+   * Claims ⌘↵ for the open note field, above Obsidian's own hotkeys.
+   *
+   * The field's keydown listener ought to be enough and is not: Obsidian
+   * dispatches its hotkey table even while a textarea has focus, so a *modified*
+   * key can be spoken for before the field ever sees it. That is the difference
+   * between Escape, which has always closed the field, and ⌘↵, which never
+   * committed anything — same listener, same branchpoint, one of them
+   * intercepted upstream. A pushed scope outranks the table.
+   *
+   * Chained to `app.scope` rather than standing alone, so every other hotkey —
+   * ⌘S, ⌘Z, the palette — still resolves while a note is being written.
+   */
+  private claimSubmitKey(): void {
+    if (this.submitScope !== null) return;
+
+    const scope = new Scope(this.app.scope);
+    scope.register(['Mod'], 'Enter', () => {
+      // Resolved now rather than captured when the scope was pushed: every
+      // repaint builds new card objects, and this scope outlives them.
+      const open = this.editing;
+      if (open === null) return false;
+      const card = this.cards.find((c) => c.entry.from === open.offset);
+      if (card) this.closeNote(card, true);
+      return false;
+    });
+
+    this.app.keymap.pushScope(scope);
+    this.submitScope = scope;
+  }
+
+  private releaseSubmitKey(): void {
+    if (this.submitScope === null) return;
+    this.app.keymap.popScope(this.submitScope);
+    this.submitScope = null;
   }
 
   getViewType(): string {
@@ -158,6 +239,9 @@ export class ReviewView extends ItemView {
 
   async onClose(): Promise<void> {
     this.cancelRefresh();
+    // A drawer closed with a field open would otherwise leave ⌘↵ claimed by a
+    // view that no longer exists.
+    this.releaseSubmitKey();
     this.containerEl.empty();
   }
 
@@ -229,6 +313,7 @@ export class ReviewView extends ItemView {
 
     if (!this.file) {
       this.cards = [];
+      this.blocks = [];
       this.paint();
       return;
     }
@@ -241,14 +326,65 @@ export class ReviewView extends ItemView {
         entry,
         raw: content.slice(entry.from, entry.to),
       }));
+      this.blocks = parseEditorial(content);
     } catch (err) {
       console.error('Manuscript: could not read the sheet for review', err);
       this.cards = [];
+      this.blocks = [];
     }
     this.paint();
   }
 
   // ─── Painting ───
+
+  /**
+   * The card built from the entry starting at `offset`, by key rather than by
+   * position.
+   *
+   * paint() appends one element per card, and four callers used to reach back
+   * into the list with an index found in `this.cards` — a correspondence that
+   * holds only while the two lists stay the same length and the same order.
+   * Nothing anywhere said so, and painting anything else into the list breaks
+   * it silently: the note field's re-focus below would look inside the wrong
+   * card, find no textarea, and the note being typed would lose focus on every
+   * repaint — which is how an empty draft gets committed over a real note.
+   *
+   * An offset is unique within a sheet, since no two entries begin at the same
+   * character, so this is a key rather than a coincidence.
+   */
+  private cardEl(offset: number): HTMLElement | null {
+    const el = this.listEl.querySelector(`.ms-review-card[data-offset="${offset}"]`);
+    return el instanceof HTMLElement ? el : null;
+  }
+
+  /**
+   * Marks and editorial comments as one list, in document order.
+   *
+   * Built fresh on each paint rather than kept as state: the two lists it
+   * merges are already the state, and a third copy is a third thing to keep in
+   * step. Neither list is long enough for the sort to matter.
+   */
+  private rows(): Row[] {
+    const rows: Row[] = [
+      ...this.cards.map((card) => ({ type: 'mark' as const, card })),
+      ...this.blocks.map((block) => ({ type: 'editorial' as const, block })),
+    ];
+    return rows.sort((a, b) => rowFrom(a) - rowFrom(b));
+  }
+
+  /**
+   * Where the row covering `offset` begins, or null if no row does.
+   *
+   * A click in the editor lands anywhere inside a construct, while a card is
+   * stamped with the offset it starts at — this is the translation between the
+   * two.
+   */
+  private rowStartCovering(offset: number): number | null {
+    const card = this.cards.find((c) => offset >= c.entry.from && offset < c.entry.to);
+    if (card) return card.entry.from;
+    const block = this.blocks.find((b) => offset >= b.from && offset < b.to);
+    return block ? block.from : null;
+  }
 
   private paint(): void {
     // A field cannot outlive its card. Without this a stale record would
@@ -262,7 +398,7 @@ export class ReviewView extends ItemView {
     // property of the code rather than of the call graph.
     const open = this.editing;
     if (open !== null && !this.cards.some((c) => c.entry.from === open.offset)) {
-      this.editing = null;
+      this.setEditing(null);
     }
 
     this.paintHeader();
@@ -275,7 +411,7 @@ export class ReviewView extends ItemView {
       return;
     }
 
-    if (this.cards.length === 0) {
+    if (this.cards.length === 0 && this.blocks.length === 0) {
       this.listEl
         .createDiv({ cls: 'ms-review-empty' })
         .setText(
@@ -285,27 +421,26 @@ export class ReviewView extends ItemView {
     }
 
     const fragment = document.createDocumentFragment();
-    for (const card of this.cards) fragment.appendChild(this.buildCard(card));
+    for (const row of this.rows()) {
+      fragment.appendChild(
+        row.type === 'mark' ? this.buildCard(row.card) : this.buildEditorialCard(row.block)
+      );
+    }
     this.listEl.appendChild(fragment);
 
     // Fresh elements know nothing of the focus their predecessors carried.
     // Re-marked without scrolling: a repaint mid-typing that also yanked the
     // list to the focused card would fight the reader's own scrolling.
     if (this.focusedOffset !== null) {
-      const offset = this.focusedOffset;
-      const index = this.cards.findIndex(
-        (c) => offset >= c.entry.from && offset < c.entry.to
-      );
-      this.listEl.children[index]?.addClass('is-focused');
+      const start = this.rowStartCovering(this.focusedOffset);
+      if (start !== null) this.cardEl(start)?.addClass('is-focused');
     }
 
     // The field is rebuilt with everything else, so it is re-focused here:
     // focus() on an element that is not yet in the document does nothing, and
     // the cards were appended a moment ago.
     if (this.editing !== null) {
-      const offset = this.editing.offset;
-      const index = this.cards.findIndex((c) => c.entry.from === offset);
-      const field = this.listEl.children[index]?.querySelector('textarea');
+      const field = this.cardEl(this.editing.offset)?.querySelector('textarea');
       if (field instanceof HTMLTextAreaElement) {
         grow(field);
         field.focus();
@@ -336,6 +471,8 @@ export class ReviewView extends ItemView {
     const { entry } = card;
     const el = createDiv({ cls: 'ms-review-card' });
     el.dataset.kind = entry.kind;
+    // How every other part of this view finds this element again. See cardEl.
+    el.dataset.offset = String(entry.from);
     el.tabIndex = 0;
 
     const quote = el.createDiv({ cls: 'ms-review-quote' });
@@ -387,6 +524,38 @@ export class ReviewView extends ItemView {
       // Only the card's own keys. The textarea inside it sends Space and Enter
       // up here too, where preventDefault would eat a word break and scroll
       // the editor instead of typing.
+      if (e.target !== el) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        reveal();
+      }
+    });
+
+    return el;
+  }
+
+  /**
+   * An editorial comment's card: what it says, and no way to settle it.
+   *
+   * No Accept, no Reject, no Resolve, and no note field. That is a decision
+   * rather than an omission — every destructive action this drawer offers acts
+   * on a construct whose whole text is on the card in front of you, and an
+   * editorial comment may run to paragraphs of which the card shows two lines.
+   * It is deleted in the manuscript, where it can be read first.
+   */
+  private buildEditorialCard(block: EditorialBlock): HTMLElement {
+    const el = createDiv({ cls: 'ms-review-card' });
+    el.dataset.kind = 'editorial';
+    el.dataset.offset = String(block.from);
+    el.tabIndex = 0;
+
+    el.createDiv({ cls: 'ms-review-editorial-title' }).setText(block.title || 'Editorial comment');
+    // Clamped in CSS rather than cut here, so the full text stays selectable.
+    el.createDiv({ cls: 'ms-review-editorial-body' }).setText(block.body || '—');
+
+    const reveal = () => this.revealRange(block.from, block.to);
+    el.addEventListener('click', reveal);
+    el.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.target !== el) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -466,6 +635,10 @@ export class ReviewView extends ItemView {
         e.stopPropagation();
         this.closeNote(card, false);
       } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        // The fallback, not the path this normally takes: claimSubmitKey gets
+        // the keystroke first and this listener never runs. Kept for the case
+        // where the scope is not pushed, and harmless if both fire — closeNote
+        // returns at once the second time, with nothing left to close.
         e.preventDefault();
         e.stopPropagation();
         this.closeNote(card, true);
@@ -599,39 +772,49 @@ export class ReviewView extends ItemView {
 
   /** Scrolls the editor to an entry and flashes it. */
   private reveal(card: Card): void {
+    // An entry flashes as a band derived from its spans — the quote alone for
+    // a mark, quote through replacement for a substitution — rather than as
+    // its raw bounds, so the markers around it stay unwashed.
+    this.revealRange(card.entry.from, card.entry.to, (cm) => flashEntry(cm, card.entry));
+  }
+
+  /** The same for an editorial comment, which has only its own bounds. */
+  private revealRange(
+    from: number,
+    to: number,
+    wash?: (cm: CmEditorView) => void
+  ): void {
     const file = this.file;
     if (!file) return;
     const view = this.editorViewFor(file);
     if (!view) return;
 
     const { editor } = view;
-    const from = editor.offsetToPos(card.entry.from);
-    const to = editor.offsetToPos(card.entry.to);
-    editor.scrollIntoView({ from, to }, true);
+    editor.scrollIntoView({ from: editor.offsetToPos(from), to: editor.offsetToPos(to) }, true);
 
     // `cm` is Obsidian's undocumented-but-established handle on the CodeMirror
     // view; without it there is no way to dispatch the flash, so it degrades
     // to scroll-without-flash if a future Obsidian drops the property.
     const cm = (editor as unknown as { cm?: CmEditorView }).cm;
-    if (cm) flashEntry(cm, card.entry);
+    if (cm) {
+      if (wash) wash(cm);
+      else flashRange(cm, from, to);
+    }
 
     this.listEl
       .querySelectorAll('.ms-review-card.is-focused')
       .forEach((el) => el.removeClass('is-focused'));
-    const index = this.cards.indexOf(card);
-    this.listEl.children[index]?.addClass('is-focused');
-    this.focusedOffset = card.entry.from;
+    this.cardEl(from)?.addClass('is-focused');
+    this.focusedOffset = from;
   }
 
   /** Scrolls the drawer to the card covering `offset` and focuses it. */
   focusAt(offset: number): void {
-    const index = this.cards.findIndex(
-      (c) => offset >= c.entry.from && offset < c.entry.to
-    );
-    if (index === -1) return;
+    const card = this.cards.find((c) => offset >= c.entry.from && offset < c.entry.to);
+    if (!card) return;
 
-    const el = this.listEl.children[index];
-    if (!(el instanceof HTMLElement)) return;
+    const el = this.cardEl(card.entry.from);
+    if (el === null) return;
 
     this.listEl.querySelectorAll('.ms-review-card.is-focused').forEach((c) => c.removeClass('is-focused'));
     el.addClass('is-focused');
@@ -653,13 +836,13 @@ export class ReviewView extends ItemView {
   async openNote(offset: number): Promise<void> {
     // Any open field has already committed on blur; clearing here keeps a
     // record that should not exist from suppressing the reload below.
-    this.editing = null;
+    this.setEditing(null);
     await this.load();
 
     const card = this.cards.find((c) => offset >= c.entry.from && offset < c.entry.to);
     if (!card) return;
 
-    this.editing = { offset: card.entry.from, draft: card.entry.comment ?? '' };
+    this.setEditing({ offset: card.entry.from, draft: card.entry.comment ?? '' });
     this.paint();
   }
 
@@ -677,7 +860,7 @@ export class ReviewView extends ItemView {
     if (editing === null || editing.offset !== card.entry.from) return;
 
     const text = commit ? editing.draft : (card.entry.comment ?? '');
-    this.editing = null;
+    this.setEditing(null);
 
     const file = this.file;
     const view = file ? this.editorViewFor(file) : null;

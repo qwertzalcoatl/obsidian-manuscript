@@ -102,12 +102,32 @@ Every construct has a command, so the whole format is reachable from the command
 | Suggest a change | no | with a selection `{~~alt~>neu~~}`, without one `{++Text++}` — either way you type the new wording in the manuscript |
 | Accept all markup in this note | no | resolves everything, keeping the suggestions |
 | Reject all markup in this note | no | resolves everything, turning them all down |
+| Insert editorial comment | no | a callout block for an observation about the passage, with the caret in it |
 | Show markup source at cursor | no | unfolds the mark under the caret for repair |
 | Open review panel | no | — |
 
-The right-click menu carries **Comment on selection**, **Highlight selection**, **Suggest deletion** and **Suggest as addition** — the last of which marks text already written as a proposed addition and has no command of its own, since everywhere else a selection means *here is what I am changing*. Nothing in your note is ever modified unless you invoke one of these.
 Proposing a cut asks a question of the writer, so *Suggest deletion* takes the caret into the note field the way a comment does. Leave the field empty and the mark simply stays as it is, unannotated.
 
+The right-click menu carries **Comment on selection**, **Highlight selection**, **Suggest deletion** and **Suggest as addition** — the last of which marks text already written as a proposed addition and has no command of its own, since everywhere else a selection means *here is what I am changing*. Nothing in your note is ever modified unless you invoke one of these.
+
+### Observations about a passage
+
+Every mark above is attached to characters, and says *change these, accept it or reject it*. The remark an editor writes most often is not that:
+
+> Dieser Absatz funktioniert noch nicht. Nells Nervosität kommt nicht raus.
+
+That is prose *about* the manuscript, and it belongs to a passage rather than to a word. **Insert editorial comment** writes it as a block standing in the text:
+
+```markdown
+> [!editorial] Editorial comment
+> Dieser Absatz funktioniert noch nicht. Nells Nervosität kommt nicht raus.
+```
+
+At the top of a sheet it reads as editorial frontmatter; between two scenes it comments on the scene it follows. It is the same block either way — only the placement differs. It renders in Live Preview and Reading view alike, folds, and holds as many paragraphs and lists as the thought needs.
+
+It appears in the drawer as a card among the marks, in document order, and clicking it jumps there. The card carries **no Accept, Reject or Resolve**, and no note field: an editorial comment is not an edit, so there is nothing to settle. You delete it in the manuscript once the passage has been fixed.
+
+For the same reason **Accept all** and **Reject all leave editorial comments standing**. A manuscript with every mark settled still carries the observations you have not answered yet, which is the point of writing them down.
 
 ### Known limitations
 
@@ -118,6 +138,8 @@ Proposing a cut asks a question of the writer, so *Suggest deletion* takes the c
 - **Accept all** / **Reject all** rewrite everything between the first and last mark in one edit, so the cursor can move if it was sitting between them. Deciding marks one at a time leaves the cursor exactly where it was.
 - `{--alt--}{++neu++}` is read as two separate marks, not as one substitution. Use `{~~alt~>neu~~}` for that.
 - Whitespace left behind by a resolved mark is yours to tidy; the plugin does not guess.
+- Every line of an editorial comment needs its own `>`. A line without one ends the block, and everything after it is ordinary prose again — which is also where Obsidian stops drawing the callout.
+- **Archive selection** does not know about editorial comments. A selection cutting through one archives the fragment it covers, the same way it would cut a mark in half.
 - In Reading view, only CriticMarkup renders. Obsidian removes `%%comments%%` from the page before any plugin can see them, so those stay invisible there — exactly as they are without this plugin.
 
 ## Archiving cut text
