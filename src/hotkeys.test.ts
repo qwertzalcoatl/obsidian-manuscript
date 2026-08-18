@@ -2,23 +2,24 @@
  * Whether this plugin's default hotkeys can actually fire.
  *
  * A binding on a punctuation key is layout-dependent, and getting it wrong fails
- * silently: the command exists, the palette runs it, and the keystroke simply
- * does nothing. That is worth a test rather than a keyboard.
+ * silently: the command exists, the palette runs it, and the keystroke does
+ * nothing. That is worth a test rather than a keyboard.
  *
- * `isMatch` and `contextOf` below are Obsidian's own logic, read out of
- * `Obsidian.app/Contents/Resources/obsidian.asar` and reproduced here. The two
- * lines that matter:
+ * Everything below the imports is Obsidian's own logic, read out of
+ * `Obsidian.app/Contents/Resources/obsidian.asar` and reproduced verbatim in
+ * shape. Three rules carry the whole file:
  *
- *   isMatch = (hotkey, ctx) =>
- *     hotkey.modifiers === ctx.modifiers &&
- *     (hotkey.key === ctx.vkey || hotkey.key.toLowerCase() === ctx.key.toLowerCase())
+ *   getModifiers(evt)      ctrlKey→'Ctrl', metaKey→'Meta', altKey→'Alt',
+ *                          shiftKey→'Shift', then compileModifiers
+ *   compileModifiers(list) list.map(m => m === 'Mod' ? (mac ? 'Meta' : 'Ctrl') : m)
+ *                              .sort().join(',')
+ *   isMatch(hotkey, ctx)   hotkey.modifiers === ctx.modifiers &&
+ *                          (hotkey.key === ctx.vkey ||
+ *                           hotkey.key.toLowerCase() === ctx.key.toLowerCase())
  *
- *   ctx.vkey = KEYCODE_TO_VKEY[evt.which] ?? 'Key' + evt.which
- *
- * `vkey` is derived from `which`, which follows the *physical* key under a
- * US mapping — so it is the US label of whatever key the finger is on. `key` is
- * the character the layout actually produces, Shift included. A binding fires
- * when it equals one or the other.
+ * `vkey` comes from a keyCode table and names the *physical* key by its US label.
+ * `key` is the character the layout actually produces. A binding fires when it
+ * equals one or the other.
  */
 
 import { SUGGEST_CHANGE_HOTKEYS, SUGGEST_DELETION_HOTKEYS } from './hotkeys';
@@ -36,40 +37,54 @@ const KEYCODE_TO_VKEY: Record<number, string> = {
   221: ']',
 };
 
+function compileModifiers(list: string[], mac: boolean): string {
+  return list
+    .map((m) => (m === 'Mod' ? (mac ? 'Meta' : 'Ctrl') : m))
+    .sort()
+    .join(',');
+}
+
 interface Ctx {
   modifiers: string;
   key: string;
   vkey: string;
 }
 
-/** What Obsidian hands its hotkey matcher for one keystroke. */
-function contextOf(modifiers: string[], which: number, char: string): Ctx {
+/**
+ * What Obsidian hands its matcher for one keystroke.
+ *
+ * `held` names the physical modifier keys down, the way an event reports them —
+ * never `Mod`, which exists only in a hotkey definition.
+ */
+function press(held: string[], which: number, char: string, mac = true): Ctx {
   return {
-    modifiers: modifiers.join(','),
+    modifiers: compileModifiers(held, mac),
     key: char,
     vkey: KEYCODE_TO_VKEY[which] ?? `Key${which}`,
   };
 }
 
-function isMatch(hotkey: Hotkey, ctx: Ctx): boolean {
+function isMatch(hotkey: Hotkey, ctx: Ctx, mac = true): boolean {
   return (
-    hotkey.modifiers.join(',') === ctx.modifiers &&
+    compileModifiers(hotkey.modifiers, mac) === ctx.modifiers &&
     (hotkey.key === ctx.vkey || hotkey.key.toLowerCase() === ctx.key.toLowerCase())
   );
 }
 
-const fires = (hotkeys: Hotkey[], ctx: Ctx) => hotkeys.some((h) => isMatch(h, ctx));
+const fires = (hotkeys: Hotkey[], ctx: Ctx, mac = true) =>
+  hotkeys.some((h) => isMatch(h, ctx, mac));
 
 // The physical key a German Mac labels '-' sits where a US board has '/', and the
-// one it labels '+' sits where US has ']'. Shift turns them into '_' and '*'.
-const GERMAN_MINUS = contextOf(['Mod', 'Shift'], 191, '_');
-const GERMAN_PLUS = contextOf(['Mod', 'Shift'], 221, '*');
+// one it labels '+' sits where US has ']'. Unshifted they type '-' and '+'.
+const GERMAN_MINUS = press(['Ctrl', 'Meta'], 191, '-');
+const GERMAN_PLUS = press(['Ctrl', 'Meta'], 221, '+');
 
-// A US board reaches '-' unshifted on keyCode 189 and '+' as Shift over 187.
-const US_MINUS = contextOf(['Mod', 'Shift'], 189, '_');
-const US_PLUS = contextOf(['Mod', 'Shift'], 187, '+');
+// A US board types '-' on keyCode 189 and reaches '+' only over 187, which types
+// '=' unshifted — so that is the character the event carries.
+const US_MINUS = press(['Ctrl', 'Meta'], 189, '-');
+const US_EQUALS = press(['Ctrl', 'Meta'], 187, '=');
 
-describe('Suggest deletion — ⌘⇧ and the minus key', () => {
+describe('Suggest deletion — ⌃⌘ and the minus key', () => {
   it('fires on a German layout', () => {
     expect(fires(SUGGEST_DELETION_HOTKEYS, GERMAN_MINUS)).toBe(true);
   });
@@ -79,30 +94,46 @@ describe('Suggest deletion — ⌘⇧ and the minus key', () => {
   });
 });
 
-describe('Suggest a change — ⌘⇧ and the plus key', () => {
+describe('Suggest a change — ⌃⌘ and the plus key', () => {
   it('fires on a German layout', () => {
     expect(fires(SUGGEST_CHANGE_HOTKEYS, GERMAN_PLUS)).toBe(true);
   });
 
-  it('fires on a US layout', () => {
-    expect(fires(SUGGEST_CHANGE_HOTKEYS, US_PLUS)).toBe(true);
+  it('fires on a US layout, where that key types an equals sign', () => {
+    expect(fires(SUGGEST_CHANGE_HOTKEYS, US_EQUALS)).toBe(true);
   });
 });
 
 describe('neither binding answers a key it has no business with', () => {
   it('ignores ⌘⇧M, which belongs to Comment on selection', () => {
-    const m = contextOf(['Mod', 'Shift'], 77, 'M');
+    const m = press(['Meta', 'Shift'], 77, 'M');
     expect(fires(SUGGEST_DELETION_HOTKEYS, m)).toBe(false);
     expect(fires(SUGGEST_CHANGE_HOTKEYS, m)).toBe(false);
   });
 
-  it('ignores the same keys without Shift, which Obsidian uses for zoom', () => {
-    expect(fires(SUGGEST_DELETION_HOTKEYS, contextOf(['Mod'], 189, '-'))).toBe(false);
-    expect(fires(SUGGEST_CHANGE_HOTKEYS, contextOf(['Mod'], 187, '='))).toBe(false);
+  // The reason these moved off ⌘⇧: Obsidian binds ⌘- to Zoom out and ⌘=/⌘⇧= to
+  // Zoom in, and the zoom binding won.
+  it('ignores the zoom shortcuts, with and without Shift', () => {
+    expect(fires(SUGGEST_DELETION_HOTKEYS, press(['Meta'], 189, '-'))).toBe(false);
+    expect(fires(SUGGEST_CHANGE_HOTKEYS, press(['Meta'], 187, '='))).toBe(false);
+    expect(fires(SUGGEST_CHANGE_HOTKEYS, press(['Meta', 'Shift'], 187, '+'))).toBe(false);
   });
 
   it('does not answer each other’s key', () => {
     expect(fires(SUGGEST_DELETION_HOTKEYS, GERMAN_PLUS)).toBe(false);
     expect(fires(SUGGEST_CHANGE_HOTKEYS, GERMAN_MINUS)).toBe(false);
+  });
+});
+
+// Recorded rather than lamented. compileModifiers turns 'Mod' into 'Ctrl' off
+// macOS, so ['Mod','Ctrl'] becomes 'Ctrl,Ctrl' — and getModifiers pushes 'Ctrl'
+// once, so no keystroke can ever produce that string. A Windows or Linux writer
+// records their own binding in Settings → Hotkeys; the README says so.
+describe('the known limit of a ⌃⌘ binding', () => {
+  it('cannot fire off macOS, where Mod and Ctrl are the same key', () => {
+    expect(fires(SUGGEST_DELETION_HOTKEYS, press(['Ctrl'], 189, '-', false), false)).toBe(
+      false
+    );
+    expect(compileModifiers(['Mod', 'Ctrl'], false)).toBe('Ctrl,Ctrl');
   });
 });

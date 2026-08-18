@@ -67,8 +67,8 @@ The commands you will reach for:
 |---|---|
 | Comment on selection — `⌘⇧M` | yes |
 | Highlight selection | yes |
-| Suggest deletion — `⌘⇧-` | yes |
-| Suggest a change — `⌘⇧+` | no — with a selection it replaces, without one it inserts |
+| Suggest deletion — `⌃⌘-` | yes |
+| Suggest a change — `⌃⌘+` | no — with a selection it replaces, without one it inserts |
 | Insert editorial comment | no |
 
 A mark may cover several paragraphs, and where you put its markers says what it
@@ -159,10 +159,12 @@ does. **The archive is append-only** — nothing here ever deletes from it, so
   the drawer names it.
 - **Accept all** / **Reject all** rewrite everything between the first and last
   mark in one edit, so the cursor can move. Deciding marks one at a time does not.
-- The two punctuation shortcuts are bound for a German and a US layout. On a
-  layout that reaches `-` or `+` some third way, record your own in
-  **Settings > Hotkeys** — Obsidian only tells a plugin which character a key
-  produces, so no default can cover every board.
+- `⌃⌘-` and `⌃⌘+` are macOS bindings for a German or US layout. Obsidian tells a
+  plugin which character a key typed and which US-labelled key it sits under, and
+  neither identifies "the minus key" on every board — so on Windows, on Linux, or
+  on a layout that reaches these keys some third way, record your own in
+  **Settings > Hotkeys**, which overrides the defaults. They avoid `⌘⇧`, where
+  Obsidian's own Zoom in wins.
 - In Reading view only CriticMarkup renders — Obsidian strips `%%comments%%`
   before any plugin sees them. A mark spanning paragraphs needs the note's source,
   which Obsidian withholds inside an embedded note and in a PDF export; there the

@@ -7,35 +7,38 @@
 import type { Hotkey } from 'obsidian';
 
 /**
- * Why each of these is a list rather than one binding.
+ * Why these sit on ⌃⌘, and why each is a list.
  *
- * Obsidian matches a keystroke against a hotkey like this, and both halves of the
- * comparison matter:
+ * **The modifier.** ⌘⇧ was the obvious choice and it does not survive contact
+ * with Obsidian, which binds ⌘- to Zoom out and both ⌘= and ⌘⇧= to Zoom in. Zoom
+ * won. ⌃⌘ is free, keeps the minus-means-cut and plus-means-add reading, and is
+ * still one hand.
+ *
+ * **The list.** Obsidian matches a keystroke like this, and both halves matter:
  *
  *     hotkey.key === event.vkey || hotkey.key.toLowerCase() === event.key.toLowerCase()
  *
  * `vkey` comes from a keyCode table that names the *physical* key by its US
  * label — so on a German board the key printed `-` reports `/`, because that is
- * where `/` sits on a US board. `key` is the character the layout actually
- * produces, Shift applied: German `⇧-` gives `_`, German `⇧+` gives `*`.
+ * where `/` sits on a US board. `key` is the character the layout actually types.
+ * So one entry cannot cover both: a German writer's minus key matches on the
+ * character, a US writer's on the vkey. The plus key needs the same treatment
+ * plus one more entry, because a US board reaches `+` only over the `=` key,
+ * which types `=` when no Shift is held.
  *
- * So a single `key: '-'` fires on a US layout and cannot fire on a German one,
- * which is exactly what shipping one binding did. Listing the characters the
- * shifted key produces makes the same physical key work on both, with no
- * per-platform branching and nothing for the writer to configure.
- *
- * `⌘⇧` rather than a bare `⌘`, because Obsidian binds `⌘-` to Zoom out and `⌘=`
- * to Zoom in. It also puts these beside the `⌘⇧M` this plugin already claims.
- *
- * A layout that reaches these two keys some third way needs a binding recorded in
- * Settings → Hotkeys, which overrides everything here.
+ * **What this does not cover.** `compileModifiers` rewrites `Mod` to `Ctrl` off
+ * macOS, so `['Mod','Ctrl']` becomes the string `Ctrl,Ctrl` there — and no
+ * keystroke can produce that, because an event reports Ctrl once. These are macOS
+ * bindings. A writer on Windows or Linux, or on a layout that reaches these keys
+ * some third way, records their own in Settings → Hotkeys, which overrides
+ * everything here. hotkeys.test.ts pins that limit rather than leaving it to be
+ * rediscovered.
  */
 export const SUGGEST_DELETION_HOTKEYS: Hotkey[] = [
-  { modifiers: ['Mod', 'Shift'], key: '-' }, // US: vkey 189
-  { modifiers: ['Mod', 'Shift'], key: '_' }, // German, US: what ⇧ over that key types
+  { modifiers: ['Mod', 'Ctrl'], key: '-' }, // German: the character; US: the vkey
 ];
 
 export const SUGGEST_CHANGE_HOTKEYS: Hotkey[] = [
-  { modifiers: ['Mod', 'Shift'], key: '+' }, // US: ⇧ over 187 types '+'
-  { modifiers: ['Mod', 'Shift'], key: '*' }, // German: ⇧ over the '+' key types '*'
+  { modifiers: ['Mod', 'Ctrl'], key: '+' }, // German: the character
+  { modifiers: ['Mod', 'Ctrl'], key: '=' }, // US: that key types '=' unshifted
 ];
