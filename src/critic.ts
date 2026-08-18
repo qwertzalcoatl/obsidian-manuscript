@@ -836,6 +836,16 @@ export function suggestChange(
   return { text: `{~~${selection}~>~~}`, caret: 3 + selection.length + 2 };
 }
 
+/**
+ * How many marks contain `entry`.
+ *
+ * The drawer indents a card by this, which is how it says that settling the mark
+ * above erases this one — without a label having to say so.
+ */
+export function nestingDepth(entries: readonly Entry[], entry: Entry): number {
+  return entries.filter((o) => o !== entry && o.from <= entry.from && o.to >= entry.to).length;
+}
+
 /** The entries no other entry contains, in document order. */
 function topLevel(entries: Entry[]): Entry[] {
   return entries.filter(

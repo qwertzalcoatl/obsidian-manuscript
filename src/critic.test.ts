@@ -3,6 +3,7 @@ import {
   parseCritic,
   applyEntry,
   minimalEdit,
+  nestingDepth,
   renderAccepted,
   renderRejected,
   sanitizeComment,
@@ -1045,5 +1046,17 @@ describe('parseCritic — blockForm', () => {
 
   it('is false for a merge, whose newlines are its content', () => {
     expect(one('…hinaus.{~~\n\n~> ~~}Der Regen…').blockForm).toBe(false);
+  });
+});
+
+describe('nestingDepth', () => {
+  it('is zero for marks that stand alone', () => {
+    const es = parseCritic('{--a--} und {++b++}');
+    expect(es.map((e) => nestingDepth(es, e))).toEqual([0, 0]);
+  });
+
+  it('counts the marks containing each one', () => {
+    const es = parseCritic('{--a {++b {==c==}++} d--}');
+    expect(es.map((e) => nestingDepth(es, e))).toEqual([0, 1, 2]);
   });
 });

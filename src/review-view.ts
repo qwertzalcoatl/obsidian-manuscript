@@ -19,6 +19,7 @@ import {
 import {
   applyEntry,
   minimalEdit,
+  nestingDepth,
   parseCritic,
   renderAccepted,
   renderRejected,
@@ -39,7 +40,7 @@ import { flashEntry, flashRange } from './critic-render';
  * settle, the other is prose about the passage.
  */
 type Row =
-  | { type: 'mark'; card: Card }
+  | { type: 'mark'; card: Card; depth: number }
   | { type: 'editorial'; block: EditorialBlock };
 
 /** Where a row begins in the sheet, which is also what its card is stamped with. */
@@ -365,8 +366,13 @@ export class ReviewView extends ItemView {
    * step. Neither list is long enough for the sort to matter.
    */
   private rows(): Row[] {
+    const entries = this.cards.map((c) => c.entry);
     const rows: Row[] = [
-      ...this.cards.map((card) => ({ type: 'mark' as const, card })),
+      ...this.cards.map((card) => ({
+        type: 'mark' as const,
+        card,
+        depth: nestingDepth(entries, card.entry),
+      })),
       ...this.blocks.map((block) => ({ type: 'editorial' as const, block })),
     ];
     return rows.sort((a, b) => rowFrom(a) - rowFrom(b));
@@ -429,7 +435,9 @@ export class ReviewView extends ItemView {
     const fragment = document.createDocumentFragment();
     for (const row of this.rows()) {
       fragment.appendChild(
-        row.type === 'mark' ? this.buildCard(row.card) : this.buildEditorialCard(row.block)
+        row.type === 'mark'
+          ? this.buildCard(row.card, row.depth)
+          : this.buildEditorialCard(row.block)
       );
     }
     this.listEl.appendChild(fragment);
@@ -473,9 +481,15 @@ export class ReviewView extends ItemView {
     }
   }
 
-  private buildCard(card: Card): HTMLElement {
+  private buildCard(card: Card, depth: number): HTMLElement {
     const { entry } = card;
     const el = createDiv({ cls: 'ms-review-card' });
+    // A mark inside another mark. The indent is the whole statement: settling
+    // the card above erases this one, and a step to the right says so.
+    if (depth > 0) {
+      el.addClass('is-nested');
+      el.style.setProperty('--ms-nesting', String(depth));
+    }
     el.dataset.kind = entry.kind;
     // How every other part of this view finds this element again. See cardEl.
     el.dataset.offset = String(entry.from);

@@ -698,6 +698,22 @@
   line-height: 1.5;
   color: var(--text-normal);
   word-break: break-word;
+  /* A block-form cut carries paragraph breaks, and setText writes the body into
+     one element — without this, HTML collapses three paragraphs into one run-on
+     line. On a single-line quote it changes nothing. */
+  white-space: pre-wrap;
+  /* Six lines, not two: a card for a three-paragraph cut would otherwise fill
+     the sidebar. In CSS rather than by truncating in JS, so the full text stays
+     selectable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A mark inside another mark. */
+.ms-review-card.is-nested {
+  padding-left: calc(var(--size-4-3) + var(--ms-nesting, 1) * var(--size-4-4));
 }
 
 /* The surrounding line, shown when a comment has no anchor of its own. It is
