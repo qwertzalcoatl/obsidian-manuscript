@@ -27,7 +27,14 @@ import {
   keymap,
   type DecorationSet,
 } from '@codemirror/view';
-import { checkMarkup, parseCritic, type Entry, type Fault, type Range } from './critic';
+import {
+  checkMarkup,
+  parseCritic,
+  type Entry,
+  type Fault,
+  type Kind,
+  type Range,
+} from './critic';
 
 /**
  * Cheap reject for the overwhelming majority of notes, which carry no markup.
@@ -789,6 +796,90 @@ interface NodeSpan {
   start: number;
 }
 
+/**
+ * What Obsidian tells a post-processor about the block it just rendered.
+ *
+ * The note's whole source and this block's line range — `getSectionInfo`'s
+ * return, restated here so this file stays free of any `obsidian` import and
+ * stays testable without one.
+ */
+export interface SectionSource {
+  text: string;
+  lineStart: number;
+  lineEnd: number;
+}
+
+/** A mark that reaches into, over, or out of one block. */
+interface Straddle {
+  kind: Kind;
+  /** Where the opening marker starts in the block's rendered text, or null when it opened earlier. */
+  opensAt: number | null;
+  /** Where the closing marker starts, or null when it closes later. */
+  closesAt: number | null;
+}
+
+const OPENER: Record<Kind, string> = {
+  insertion: '{++',
+  deletion: '{--',
+  substitution: '{~~',
+  highlight: '{==',
+  comment: '{>>',
+};
+
+const CLOSER: Record<Kind, string> = {
+  insertion: '++}',
+  deletion: '--}',
+  substitution: '~~}',
+  highlight: '==}',
+  comment: '<<}',
+};
+
+/** Offset of the start of every line, so a line number becomes an offset. */
+function lineStarts(text: string): number[] {
+  const out = [0];
+  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) out.push(i + 1);
+  return out;
+}
+
+/**
+ * The marks reaching across this block's boundaries, and where their markers sit
+ * in its rendered text.
+ *
+ * The one question a block cannot answer for itself. Guessing is not available: a
+ * paragraph ending in an unmatched `{--` is either a mark continuing into the next
+ * paragraph or a typo, and guessing "continuing" would strike through a tail that
+ * Live Preview leaves as plain braces — the two display modes are not allowed to
+ * disagree about what a note says.
+ *
+ * Only the *kind* is taken from the source. The markers themselves are found in
+ * the block's own rendered text, because a marker survives rendering as literal
+ * text, so source offsets never have to be mapped onto the DOM. Mapping them would
+ * be the expensive part, and this does not do it.
+ */
+function straddles(
+  source: SectionSource,
+  entries: readonly Entry[],
+  blockText: string
+): Straddle[] {
+  const lineAt = lineStarts(source.text);
+  const blockFrom = lineAt[source.lineStart] ?? 0;
+  const blockTo =
+    source.lineEnd + 1 < lineAt.length ? lineAt[source.lineEnd + 1] - 1 : source.text.length;
+
+  const out: Straddle[] = [];
+  for (const entry of entries) {
+    const opensBefore = entry.from < blockFrom;
+    const closesAfter = entry.to > blockTo;
+    if (!opensBefore && !closesAfter) continue; // wholly inside — the block parse has it
+    if (entry.to <= blockFrom || entry.from >= blockTo) continue; // not this block at all
+
+    const opensAt = opensBefore ? null : blockText.indexOf(OPENER[entry.kind]);
+    const closesAt = closesAfter ? null : blockText.indexOf(CLOSER[entry.kind]);
+    out.push({ kind: entry.kind, opensAt, closesAt });
+  }
+  return out;
+}
+
 /** The nearest block-level ancestor, so a construct cannot span two paragraphs. */
 function blockOf(node: Node, root: HTMLElement): HTMLElement {
   let el = node.parentElement;
@@ -969,8 +1060,20 @@ function applyOne(spans: NodeSpan[], op: Op): void {
  * Comments render as nothing at all, anchored or not: they live in the Review
  * drawer, and an editorial note has no business interrupting a reader.
  */
-export function renderCriticMarkup(root: HTMLElement): void {
-  for (const [block, nodes] of textNodesByBlock(root)) {
+export function renderCriticMarkup(root: HTMLElement, source?: SectionSource): void {
+  const groups = textNodesByBlock(root);
+  // Straddle handling needs a line range that describes exactly one block. A
+  // section holding several — a callout, a list — gets one range for all of them,
+  // so it falls back to the per-block parse. Marks inside a callout are
+  // single-paragraph in practice.
+  const single = source !== undefined && groups.size === 1;
+  // Parsed once rather than per block: it is the same note every time.
+  const sourceEntries =
+    single && source !== undefined && mightHaveMarkup(source.text)
+      ? parseCritic(source.text)
+      : [];
+
+  for (const [block, nodes] of groups) {
     const spans: NodeSpan[] = [];
     let text = '';
     for (const node of nodes) {
@@ -978,7 +1081,11 @@ export function renderCriticMarkup(root: HTMLElement): void {
       text += node.data;
     }
 
-    if (!mightHaveMarkup(text)) continue;
+    // A block lying wholly inside a mark carries no marker of its own, so the
+    // cheap reject cannot decide on its own whether there is work here.
+    const crossing =
+      single && source !== undefined ? straddles(source, sourceEntries, text) : [];
+    if (!mightHaveMarkup(text) && crossing.length === 0) continue;
 
     const ops: Op[] = [];
     for (const entry of parseCritic(text)) {
@@ -1015,16 +1122,49 @@ export function renderCriticMarkup(root: HTMLElement): void {
       }
     }
 
-    // A marker this block cannot pair belongs to a mark that opened in an earlier
-    // block or closes in a later one. Obsidian hands a post-processor one block at
-    // a time, so the partner is not here to be found — and a brace shown to a
-    // reader is worse than a passage left unstyled. checkMarkup skips code and
-    // frontmatter itself, which is what keeps a literal `{--` in a code span safe.
+    {
+      for (const straddle of crossing) {
+        const bodyFrom = straddle.opensAt === null ? 0 : straddle.opensAt + 3;
+        const bodyTo = straddle.closesAt === null ? text.length : straddle.closesAt;
+        if (straddle.opensAt !== null) {
+          ops.push({ from: straddle.opensAt, to: straddle.opensAt + 3, op: 'hide' });
+        }
+        if (straddle.closesAt !== null) {
+          ops.push({ from: straddle.closesAt, to: straddle.closesAt + 3, op: 'hide' });
+        }
+        if (bodyTo <= bodyFrom) continue;
+        // A comment renders as nothing at all, anchored or not — an editorial note
+        // has no business interrupting a reader.
+        if (straddle.kind === 'comment') {
+          ops.push({ from: bodyFrom, to: bodyTo, op: 'hide' });
+        } else if (QUOTE_CLASS[straddle.kind]) {
+          ops.push({
+            from: bodyFrom,
+            to: bodyTo,
+            op: 'wrap',
+            cls: QUOTE_CLASS[straddle.kind],
+            label: `Suggested change: ${text.slice(bodyFrom, bodyTo)}`,
+          });
+        }
+      }
+    }
+
+    // Whatever is still unpaired after all of that belongs to a mark whose partner
+    // is in another block and whose source was not available. Obsidian returns
+    // nothing from getSectionInfo for an embedded note or a PDF export, and a brace
+    // shown to a reader is worse than a passage left unstyled.
     for (const fault of checkMarkup(text)) {
       if (fault.entryFrom !== null) continue;
+      if (ops.some((op) => op.from <= fault.at.from && op.to >= fault.at.to)) continue;
       ops.push({ ...fault.at, op: 'hide' });
     }
 
     if (ops.length > 0) applyOps(block, root, ops);
+
+    // A block-form marker sits alone on its line, so Obsidian renders it as a
+    // paragraph of its own — and hiding the marker leaves that paragraph empty,
+    // which the reader sees as a blank line where the syntax used to be. An element
+    // whose text is entirely gone held nothing but markup.
+    if (block !== root && block.textContent === '') block.remove();
   }
 }

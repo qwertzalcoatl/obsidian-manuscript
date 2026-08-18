@@ -1522,7 +1522,14 @@ export default class ManuscriptPlugin extends Plugin {
     this.registerEditorExtension(
       criticEditorExtension((offset) => this.focusReviewCard(offset))
     );
-    this.registerMarkdownPostProcessor((el) => renderCriticMarkup(el));
+    // getSectionInfo is the only way a post-processor can learn what the note says
+    // outside the block it was handed, which is exactly what a mark spanning two
+    // paragraphs needs. It returns null in several contexts — an embedded note, a
+    // PDF export — and the renderer is written for that: no braces reach the
+    // reader either way, only the styling goes.
+    this.registerMarkdownPostProcessor((el, ctx) =>
+      renderCriticMarkup(el, ctx.getSectionInfo(el) ?? undefined)
+    );
 
     this.addCommand({
       id: "open-review-panel",

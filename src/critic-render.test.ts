@@ -236,3 +236,51 @@ describe('renderCriticMarkup — a mark inside a mark', () => {
     expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('neu');
   });
 });
+
+describe('renderCriticMarkup — a mark across blocks, with the source', () => {
+  const SOURCE = 'Sie ging{-- fort.\n\nDer Regen--} blieb.';
+
+  /** Renders one block with the section info Obsidian would supply. */
+  function renderBlock(html: string, lineStart: number, lineEnd: number): HTMLElement {
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    renderCriticMarkup(root, { text: SOURCE, lineStart, lineEnd });
+    return root;
+  }
+
+  it('strikes the tail of the block the mark opens in', () => {
+    const root = renderBlock('<p>Sie ging{-- fort.</p>', 0, 0);
+    expect(root.textContent).toBe('Sie ging fort.');
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe(' fort.');
+  });
+
+  it('strikes the head of the block the mark closes in', () => {
+    const root = renderBlock('<p>Der Regen--} blieb.</p>', 2, 2);
+    expect(root.textContent).toBe('Der Regen blieb.');
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe('Der Regen');
+  });
+
+  it('strikes a whole block that lies inside the mark', () => {
+    const source = 'a{--\n\nmitten\n\nb--}';
+    const root = document.createElement('div');
+    root.innerHTML = '<p>mitten</p>';
+    renderCriticMarkup(root, { text: source, lineStart: 2, lineEnd: 2 });
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe('mitten');
+  });
+
+  it('falls back to hiding the marker when no source is supplied', () => {
+    const bare = document.createElement('div');
+    bare.innerHTML = '<p>Sie ging{-- fort.</p>';
+    renderCriticMarkup(bare);
+    expect(bare.textContent).toBe('Sie ging fort.');
+    expect(bare.querySelector('.ms-critic-deletion')).toBeNull();
+  });
+
+  it('removes a block that held nothing but a marker line', () => {
+    const source = 'A.\n\n{--\nP1\n--}\n\nB.';
+    const root = document.createElement('div');
+    root.innerHTML = '<p>{--</p>';
+    renderCriticMarkup(root, { text: source, lineStart: 2, lineEnd: 2 });
+    expect(root.querySelector('p')).toBeNull();
+  });
+});
