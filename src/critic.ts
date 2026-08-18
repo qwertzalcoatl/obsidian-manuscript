@@ -319,67 +319,100 @@ export function sanitizeComment(text: string, close: '<<}' | '%%' = '<<}'): stri
   return flat.split('<<}').join('<< }');
 }
 
+/** The construct one regex match describes. */
+function rawAt(content: string, m: RegExpExecArray, from: number, to: number): Raw {
+  const blockForm = isBlockForm(content, from, to, 3);
+
+  if (m[1] !== undefined) return simple('insertion', from, to, m[1], 3, false, blockForm);
+  if (m[2] !== undefined) return simple('deletion', from, to, m[2], 3, false, blockForm);
+  if (m[4] !== undefined) return simple('highlight', from, to, m[4], 3, false, blockForm);
+  if (m[5] !== undefined) return simple('comment', from, to, m[5], 3, false, blockForm);
+
+  // Splits on the first ~>; a body without one is a malformed substitution and
+  // is treated as a deletion of exactly what it holds. checkMarkup says so on
+  // the card, because a writer who meant "replace" got "cut".
+  const body = m[3];
+  const arrow = body.indexOf('~>');
+  if (arrow === -1) return simple('deletion', from, to, body, 3, false, blockForm);
+
+  const lead = blockForm && body.startsWith('\n') ? 1 : 0;
+  const trail = blockForm && body.length > lead && body.endsWith('\n') ? 1 : 0;
+  const oldHalf = body.slice(lead, arrow);
+  const newHalf = body.slice(arrow + 2, body.length - trail);
+  // The arrow is a marker with an inside edge on both sides, so it takes a
+  // newline from each — which is what makes `{~~\nalt\n~>\nneu\n~~}` report
+  // `alt` and `neu` rather than `alt\n` and `\nneu`.
+  const oldTrail = blockForm && oldHalf.endsWith('\n') ? 1 : 0;
+  const newLead = blockForm && newHalf.startsWith('\n') ? 1 : 0;
+
+  const bodyFrom = from + 3 + lead;
+  const arrowFrom = from + 3 + arrow - oldTrail;
+  const arrowTo = from + 3 + arrow + 2 + newLead;
+  const bodyTo = to - 3 - trail;
+
+  return {
+    kind: 'substitution',
+    from,
+    to,
+    quote: oldHalf.slice(0, oldHalf.length - oldTrail),
+    replacement: newHalf.slice(newLead),
+    native: false,
+    blockForm,
+    markers: [
+      { from, to: bodyFrom },
+      { from: arrowFrom, to: arrowTo },
+      { from: bodyTo, to },
+    ],
+    quoteAt: { from: bodyFrom, to: arrowFrom },
+    replacementAt: { from: arrowTo, to: bodyTo },
+  };
+}
+
 function scanCritic(content: string, skip: Range[]): Raw[] {
+  return scanWindow(content, skip, 0, content.length);
+}
+
+/**
+ * Every construct between `from` and `to`, and every construct inside those.
+ *
+ * A window rather than a substring, so offsets stay absolute and no caller has
+ * to add anything back. Its own regex object rather than the module-level one,
+ * because the recursion would otherwise share `lastIndex` with its caller.
+ *
+ * Nesting is not a luxury here: it is what a mark spanning paragraphs produces.
+ * Wrap three paragraphs of an already-reviewed draft in a cut and the marks that
+ * were already there are now inside it.
+ *
+ * A body is scanned; a comment's body is not. Braces in a note are literal text
+ * — a note is a remark about the manuscript rather than part of it — and
+ * scanning one would turn `{>>siehe {--alt--}<<}` into a mark nobody wrote.
+ */
+function scanWindow(content: string, skip: Range[], from: number, to: number): Raw[] {
   const out: Raw[] = [];
-  CRITIC_RE.lastIndex = 0;
+  const re = new RegExp(CRITIC_RE.source, 'g');
+  re.lastIndex = from;
 
-  for (let m = CRITIC_RE.exec(content); m !== null; m = CRITIC_RE.exec(content)) {
-    const from = m.index;
-    const to = from + m[0].length;
+  for (let m = re.exec(content); m !== null; m = re.exec(content)) {
+    const start = m.index;
+    const end = start + m[0].length;
 
-    if (overlaps(skip, from, to)) continue;
+    // A match escaping the window means the text inside it is malformed and the
+    // closing marker it found belongs to something further out. Stopping is what
+    // leaves that marker for checkMarkup to report.
+    if (end > to) break;
+    if (overlaps(skip, start, end)) continue;
 
-    const blockForm = isBlockForm(content, from, to, 3);
+    const raw = rawAt(content, m, start, end);
+    out.push(raw);
 
-    if (m[1] !== undefined) {
-      out.push(simple('insertion', from, to, m[1], 3, false, blockForm));
-    } else if (m[2] !== undefined) {
-      out.push(simple('deletion', from, to, m[2], 3, false, blockForm));
-    } else if (m[3] !== undefined) {
-      // Splits on the first ~>; a body without one is a malformed substitution
-      // and is treated as a deletion of exactly what it holds.
-      const arrow = m[3].indexOf('~>');
-      if (arrow === -1) {
-        out.push(simple('deletion', from, to, m[3], 3, false, blockForm));
-      } else {
-        const body = m[3];
-        const lead = blockForm && body.startsWith('\n') ? 1 : 0;
-        const trail = blockForm && body.length > lead && body.endsWith('\n') ? 1 : 0;
-        const oldHalf = body.slice(lead, arrow);
-        const newHalf = body.slice(arrow + 2, body.length - trail);
-        // The arrow is a marker with an inside edge on both sides, so it takes a
-        // newline from each — which is what makes `{~~\nalt\n~>\nneu\n~~}`
-        // report `alt` and `neu` rather than `alt\n` and `\nneu`.
-        const oldTrail = blockForm && oldHalf.endsWith('\n') ? 1 : 0;
-        const newLead = blockForm && newHalf.startsWith('\n') ? 1 : 0;
-
-        const bodyFrom = from + 3 + lead;
-        const arrowFrom = from + 3 + arrow - oldTrail;
-        const arrowTo = from + 3 + arrow + 2 + newLead;
-        const bodyTo = to - 3 - trail;
-
-        out.push({
-          kind: 'substitution',
-          from,
-          to,
-          quote: oldHalf.slice(0, oldHalf.length - oldTrail),
-          replacement: newHalf.slice(newLead),
-          native: false,
-          blockForm,
-          markers: [
-            { from, to: bodyFrom },
-            { from: arrowFrom, to: arrowTo },
-            { from: bodyTo, to },
-          ],
-          quoteAt: { from: bodyFrom, to: arrowFrom },
-          replacementAt: { from: arrowTo, to: bodyTo },
-        });
+    if (raw.kind !== 'comment') {
+      out.push(...scanWindow(content, skip, raw.quoteAt.from, raw.quoteAt.to));
+      if (raw.replacementAt) {
+        out.push(...scanWindow(content, skip, raw.replacementAt.from, raw.replacementAt.to));
       }
-    } else if (m[4] !== undefined) {
-      out.push(simple('highlight', from, to, m[4], 3, false, blockForm));
-    } else {
-      out.push(simple('comment', from, to, m[5], 3, false, blockForm));
     }
+
+    re.lastIndex = end;
   }
 
   return out;
@@ -469,9 +502,15 @@ export function parseCritic(content: string): Entry[] {
     }
 
     const next = raws[i + 1];
+    // `next.from >= raw.to` is what stops a *nested* comment from being read as
+    // an attached one. Inside `{--foo{>>bar<<}--}` the comment starts before the
+    // deletion ends, so the slice runs backwards, returns the empty string, and
+    // the whitespace test passes — setting this entry's `to` to a point before
+    // its own closing marker and invalidating every offset downstream.
     const attached =
       next !== undefined &&
       next.kind === 'comment' &&
+      next.from >= raw.to &&
       /^[ \t]*$/.test(content.slice(raw.to, next.from));
 
     // A bare ==highlight== is ordinary markdown until a comment claims it.

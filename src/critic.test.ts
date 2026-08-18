@@ -836,3 +836,59 @@ describe('parseCritic — the block form', () => {
     expect(applyEntry(src, one(src), 'resolve')).toBe('A.\n\nB.');
   });
 });
+
+describe('parseCritic — marks inside marks', () => {
+  it('reads a substitution inside a deletion', () => {
+    const es = parseCritic('{--Sie zählte. {~~Dann~>Schließlich~~} Ende.--}');
+    expect(es).toHaveLength(2);
+    expect(es[0].kind).toBe('deletion');
+    expect(es[1].kind).toBe('substitution');
+    expect(es[1].from).toBeGreaterThan(es[0].from);
+    expect(es[1].to).toBeLessThan(es[0].to);
+  });
+
+  it('reads a deletion inside an insertion across a blank line', () => {
+    const es = parseCritic('{++ vergessen\n\nspäter {--echt--} hier ++}');
+    expect(es.map((e) => e.kind)).toEqual(['insertion', 'deletion']);
+    expect(es[1].quote).toBe('echt');
+  });
+
+  // Braces in a note are literal text. A comment is a remark about the
+  // manuscript, not part of it, so nothing inside one is a mark.
+  it('leaves braces inside a comment body alone', () => {
+    const es = parseCritic('{>>siehe {--alt--}<<}');
+    expect(es).toHaveLength(1);
+    expect(es[0].kind).toBe('comment');
+    expect(es[0].comment).toBe('siehe {--alt--}');
+  });
+
+  // The one case the format cannot express: the first closing marker has no
+  // way to say which opener it belongs to.
+  it('closes same-kind nesting at the first closer', () => {
+    const es = parseCritic('{--a {--b--} c--}');
+    expect(es).toHaveLength(1);
+    expect(es[0].quote).toBe('a {--b');
+  });
+
+  // Only the recursion can reach this. `slice(raw.to, next.from)` runs
+  // backwards for a nested comment, returns the empty string, and the
+  // whitespace test passes — which used to set the outer entry's end to a
+  // point before its own closing marker.
+  it('does not attach a comment that sits inside the mark before it', () => {
+    const src = '{--foo{>>bar<<}--}';
+    const es = parseCritic(src);
+    expect(es).toHaveLength(2);
+    expect(es[0].to).toBe(src.length);
+    expect(es[0].comment).toBeNull();
+    expect(es[1].kind).toBe('comment');
+    expect(es[1].comment).toBe('bar');
+  });
+
+  it('still attaches a comment that follows a nested mark', () => {
+    const es = parseCritic('{--foo {==bar==}{>>warum<<} baz--}');
+    expect(es).toHaveLength(2);
+    expect(es[0].kind).toBe('deletion');
+    expect(es[1].kind).toBe('highlight');
+    expect(es[1].comment).toBe('warum');
+  });
+});
