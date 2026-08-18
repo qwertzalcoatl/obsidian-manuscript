@@ -7,14 +7,14 @@
 import type { Hotkey } from 'obsidian';
 
 /**
- * Why these sit on ⌃⌘, and why each is a list.
+ * Why these sit on ⌃⌘, and why some are lists.
  *
  * **The modifier.** ⌘⇧ was the obvious choice and it does not survive contact
  * with Obsidian, which binds ⌘- to Zoom out and both ⌘= and ⌘⇧= to Zoom in. Zoom
  * won. ⌃⌘ is free, keeps the minus-means-cut and plus-means-add reading, and is
  * still one hand.
  *
- * **The list.** Obsidian matches a keystroke like this, and both halves matter:
+ * **The lists.** Obsidian matches a keystroke like this, and both halves matter:
  *
  *     hotkey.key === event.vkey || hotkey.key.toLowerCase() === event.key.toLowerCase()
  *
@@ -32,8 +32,12 @@ import type { Hotkey } from 'obsidian';
  * bindings. A writer on Windows or Linux, or on a layout that reaches these keys
  * some third way, records their own in Settings → Hotkeys, which overrides
  * everything here. hotkeys.test.ts pins that limit rather than leaving it to be
- * rediscovered.
+ * rediscovered. A letter key needs no list: `M` is `M` on every layout this
+ * plugin has any business guessing about.
  */
+
+export const COMMENT_HOTKEYS: Hotkey[] = [{ modifiers: ['Mod', 'Ctrl'], key: 'm' }];
+
 export const SUGGEST_DELETION_HOTKEYS: Hotkey[] = [
   { modifiers: ['Mod', 'Ctrl'], key: '-' }, // German: the character; US: the vkey
 ];

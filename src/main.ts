@@ -36,7 +36,11 @@ import {
   wrapForm,
 } from "./critic";
 import { editorialInsertion } from "./editorial";
-import { SUGGEST_CHANGE_HOTKEYS, SUGGEST_DELETION_HOTKEYS } from "./hotkeys";
+import {
+  COMMENT_HOTKEYS,
+  SUGGEST_CHANGE_HOTKEYS,
+  SUGGEST_DELETION_HOTKEYS,
+} from "./hotkeys";
 import {
   criticEditorExtension,
   criticField,
@@ -1563,7 +1567,7 @@ export default class ManuscriptPlugin extends Plugin {
 
     // The only way to see a brace in this plugin. Everything else keeps the
     // markup folded, which is right until a construct is malformed — then
-    // there has to be a way in. No default hotkey: ⌘⇧M is the only binding
+    // there has to be a way in. No default hotkey: the three ⌃⌘ bindings are all
     // this plugin claims, and this is a repair tool, not a daily one.
     this.addCommand({
       id: "toggle-markup-source",
@@ -1592,9 +1596,12 @@ export default class ManuscriptPlugin extends Plugin {
     // One command per construct the format supports, named so that typing
     // "suggest" in the palette turns up both suggestion commands together and
     // "markup" turns up the whole-note actions.
-    this.addSelectionCommand("comment-on-selection", "Comment on selection", "comment", [
-      { modifiers: ["Mod", "Shift"], key: "m" },
-    ]);
+    this.addSelectionCommand(
+      "comment-on-selection",
+      "Comment on selection",
+      "comment",
+      COMMENT_HOTKEYS
+    );
     this.addSelectionCommand("highlight-selection", "Highlight selection", "highlight");
     // Minus for a cut, plus for an addition or a replacement. Each binding is a
     // list because a punctuation key means different characters on different

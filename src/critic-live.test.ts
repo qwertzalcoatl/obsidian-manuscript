@@ -637,7 +637,7 @@ describe('constructToSelectOnDelete — the line a collapsed comment took with i
 });
 
 describe('suggestChange — the caret lands somewhere it can rest', () => {
-  // The bug this exists for: ⌘⇧M put the caret three characters into a
+  // The bug this exists for: Comment on selection put the caret three characters into a
   // six-character hidden range, so you were typing into text that never
   // rendered and the first arrow key threw the caret out of it.
   const reachable = (doc: string, caret: number) => {

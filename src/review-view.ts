@@ -72,7 +72,14 @@ export const VIEW_TYPE_REVIEW = 'manuscript-review';
 /** Long enough for a card's collapse animation to finish before the repaint. */
 const REFRESH_DELAY = 200;
 
-const COMMENT_HOTKEY = Platform.isMacOS ? '⌘⇧M' : 'Ctrl+Shift+M';
+// The whole phrase rather than the key alone: ⌃⌘ has no default off macOS — see
+// hotkeys.ts — so there is no key to name there, and "press <nothing>" is worse
+// than pointing at the command. Written out rather than derived from
+// COMMENT_HOTKEYS, because this is the one place a binding is shown to a reader
+// and a hotkey list does not know how to spell itself.
+const COMMENT_HINT = Platform.isMacOS
+  ? 'press ⌃⌘M'
+  : 'run Comment on selection from the command palette';
 
 /**
  * The note as the user currently sees it: the editor's text when it is open,
@@ -467,7 +474,7 @@ export class ReviewView extends ItemView {
       this.listEl
         .createDiv({ cls: 'ms-review-empty' })
         .setText(
-          `Nothing to review. Select a passage and press ${COMMENT_HOTKEY}; the note is typed here.`
+          `Nothing to review. Select a passage and ${COMMENT_HINT}; the note is typed here.`
         );
       return;
     }

@@ -65,7 +65,7 @@ The commands you will reach for:
 
 | Command | Needs a selection |
 |---|---|
-| Comment on selection — `⌘⇧M` | yes |
+| Comment on selection — `⌃⌘M` | yes |
 | Highlight selection | yes |
 | Suggest deletion — `⌃⌘-` | yes |
 | Suggest a change — `⌃⌘+` | no — with a selection it replaces, without one it inserts |
@@ -159,7 +159,7 @@ does. **The archive is append-only** — nothing here ever deletes from it, so
   the drawer names it.
 - **Accept all** / **Reject all** rewrite everything between the first and last
   mark in one edit, so the cursor can move. Deciding marks one at a time does not.
-- `⌃⌘-` and `⌃⌘+` are macOS bindings for a German or US layout. Obsidian tells a
+- `⌃⌘M`, `⌃⌘-` and `⌃⌘+` are macOS bindings for a German or US layout. Obsidian tells a
   plugin which character a key typed and which US-labelled key it sits under, and
   neither identifies "the minus key" on every board — so on Windows, on Linux, or
   on a layout that reaches these keys some third way, record your own in

@@ -712,7 +712,7 @@ describe('setComment — writing a note into the source', () => {
 });
 
 describe('the comment command, end to end through the pure layer', () => {
-  // What ⌘⇧M writes, what the drawer then parses, and what committing the
+  // What Comment on selection writes, what the drawer then parses, and what committing the
   // field does — the one sequence in this feature that spans every piece.
   const WRAP: [string, string] = ['{==', '==}{>><<}'];
 

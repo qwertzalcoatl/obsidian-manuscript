@@ -22,7 +22,11 @@
  * equals one or the other.
  */
 
-import { SUGGEST_CHANGE_HOTKEYS, SUGGEST_DELETION_HOTKEYS } from './hotkeys';
+import {
+  COMMENT_HOTKEYS,
+  SUGGEST_CHANGE_HOTKEYS,
+  SUGGEST_DELETION_HOTKEYS,
+} from './hotkeys';
 
 interface Hotkey {
   modifiers: string[];
@@ -104,11 +108,26 @@ describe('Suggest a change — ⌃⌘ and the plus key', () => {
   });
 });
 
-describe('neither binding answers a key it has no business with', () => {
-  it('ignores ⌘⇧M, which belongs to Comment on selection', () => {
-    const m = press(['Meta', 'Shift'], 77, 'M');
+// A letter needs no list: M is M on every layout, and isMatch lowercases both
+// sides, so the shifted character an event carries makes no difference.
+describe('Comment on selection — ⌃⌘M', () => {
+  it('fires whatever case the event reports', () => {
+    expect(fires(COMMENT_HOTKEYS, press(['Ctrl', 'Meta'], 77, 'm'))).toBe(true);
+    expect(fires(COMMENT_HOTKEYS, press(['Ctrl', 'Meta'], 77, 'M'))).toBe(true);
+  });
+
+  it('no longer answers the ⌘⇧M it used to be bound to', () => {
+    expect(fires(COMMENT_HOTKEYS, press(['Meta', 'Shift'], 77, 'M'))).toBe(false);
+  });
+});
+
+describe('no binding answers a key it has no business with', () => {
+  it('keeps the three apart', () => {
+    const m = press(['Ctrl', 'Meta'], 77, 'm');
     expect(fires(SUGGEST_DELETION_HOTKEYS, m)).toBe(false);
     expect(fires(SUGGEST_CHANGE_HOTKEYS, m)).toBe(false);
+    expect(fires(COMMENT_HOTKEYS, GERMAN_MINUS)).toBe(false);
+    expect(fires(COMMENT_HOTKEYS, GERMAN_PLUS)).toBe(false);
   });
 
   // The reason these moved off ⌘⇧: Obsidian binds ⌘- to Zoom out and ⌘=/⌘⇧= to
@@ -134,6 +153,7 @@ describe('the known limit of a ⌃⌘ binding', () => {
     expect(fires(SUGGEST_DELETION_HOTKEYS, press(['Ctrl'], 189, '-', false), false)).toBe(
       false
     );
+    expect(fires(COMMENT_HOTKEYS, press(['Ctrl'], 77, 'm', false), false)).toBe(false);
     expect(compileModifiers(['Mod', 'Ctrl'], false)).toBe('Ctrl,Ctrl');
   });
 });
