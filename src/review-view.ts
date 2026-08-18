@@ -584,7 +584,14 @@ export class ReviewView extends ItemView {
       return;
     }
 
-    const span = (text: string, cls: string) => el.createSpan({ cls }).setText(text);
+    // A break inside an inline mark is part of what the mark changes, so the card
+    // shows it the way the editor does. In the block form the breaks are
+    // paragraph separators and the card sets them as breaks — see the white-space
+    // rule on .ms-review-quote.
+    const withBreaks = (text: string) => (entry.blockForm ? text : text.replace(/\n/g, '¶'));
+
+    const span = (text: string, cls: string) =>
+      el.createSpan({ cls }).setText(withBreaks(text));
     // The manuscript's own placeholder, on the card. A construct you have
     // started but not written into is an entry like any other, so it gets a
     // card — and without this the card is a blank line. Exact emptiness rather

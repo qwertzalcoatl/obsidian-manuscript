@@ -830,3 +830,26 @@ describe('criticDecorations — what nesting could break', () => {
     ).not.toThrow();
   });
 });
+
+describe('criticDecorations — the paragraph break inside a mark', () => {
+  const pilcrows = (doc: string) =>
+    paint(doc).filter((p) => p.cls === 'ms-critic-pilcrow');
+
+  it('draws a pilcrow at each newline inside an inline mark', () => {
+    expect(pilcrows('Sie{-- ging.\n\nDann--} kam.')).toHaveLength(2);
+  });
+
+  // In the block form the breaks separate whole paragraphs, which the reader
+  // already sees as paragraphs.
+  it('draws none in the block form', () => {
+    expect(pilcrows('{--\nP1\n\nP2\n--}')).toHaveLength(0);
+  });
+
+  it('draws one per break in a merge, where there is nothing else to see', () => {
+    expect(pilcrows('hinaus.{~~\n\n~> ~~}Der')).toHaveLength(2);
+  });
+
+  it('draws none in a mark that stays on one line', () => {
+    expect(pilcrows('Sie {--ging--} fort.')).toHaveLength(0);
+  });
+});

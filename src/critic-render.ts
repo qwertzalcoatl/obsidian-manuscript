@@ -148,6 +148,62 @@ class PlaceholderWidget extends WidgetType {
 const PLACEHOLDER = Decoration.widget({ widget: new PlaceholderWidget(), side: 1 });
 
 /**
+ * A paragraph break inside a mark, made visible.
+ *
+ * A struck-through blank line is invisible, so without this a merge —
+ * `{~~\n\n~> ~~}`, a substitution whose quoted half is the break itself — has
+ * nothing on screen to say it exists at all, and its card reads as an arrow with
+ * empty text on either side.
+ *
+ * A widget beside the newline rather than a replacement of it, for two reasons.
+ * An inline replacing decoration may not span a line break at all. And the break
+ * is still real until the mark is accepted, so the paragraphs should still read
+ * as two — the glyph says a break is being changed, not that it is already gone.
+ *
+ * A convention rather than a label, which is why it is a glyph and not the word
+ * "Absatzumbruch". Text editors have shown whitespace this way for forty years.
+ */
+class PilcrowWidget extends WidgetType {
+  readonly cls = 'ms-critic-pilcrow';
+  readonly text = '¶';
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.className = this.cls;
+    el.textContent = this.text;
+    return el;
+  }
+
+  eq(): boolean {
+    return true;
+  }
+}
+
+// side: -1 draws it before the position, so it lands at the end of the line the
+// newline closes rather than at the start of the next one.
+const PILCROW = Decoration.widget({ widget: new PilcrowWidget(), side: -1 });
+
+/**
+ * Where an entry wants a pilcrow: every newline in a body it is changing.
+ *
+ * The block form is excluded. There the newlines against the markers belong to
+ * the markers, and the ones between them separate paragraphs the reader can
+ * already see as paragraphs.
+ */
+function pilcrowRanges(state: EditorState, entry: Entry): number[] {
+  if (entry.blockForm) return [];
+  const out: number[] = [];
+  for (const body of [entry.spans.quote, entry.spans.replacement]) {
+    if (!nonEmpty(body)) continue;
+    const text = state.doc.sliceString(body.from, body.to);
+    for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) {
+      out.push(body.from + i);
+    }
+  }
+  return out;
+}
+
+/**
  * The empty body a placeholder should stand in, or null.
  *
  * Only the two an authoring command can produce: an insertion's text, and a
@@ -304,6 +360,10 @@ export function criticDecorations(state: EditorState): DecorationSet {
 
     mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
     mark(entry.spans.replacement, 'ms-critic-insertion');
+
+    for (const at of pilcrowRanges(state, entry)) {
+      ranges.push({ from: at, to: at, value: PILCROW });
+    }
 
     if (revealed) continue;
 

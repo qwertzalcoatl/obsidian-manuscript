@@ -479,6 +479,15 @@
    inline-block so no decoration on a surrounding construct paints through it,
    and the margin is breathing room against the next word — both gone on the
    first keystroke anyway. */
+/* A paragraph break inside a mark. Dimmer than the prose it sits in — it says
+   where a break is, and is not itself something to read. The strikethrough or
+   underline around it comes from the body's own mark, so this rule sets colour
+   and spacing and nothing else. */
+.ms-critic-pilcrow {
+  color: var(--text-faint);
+  padding: 0 0.1em;
+}
+
 .ms-critic-placeholder {
   display: inline-block;
   padding: 0 0.15em;
