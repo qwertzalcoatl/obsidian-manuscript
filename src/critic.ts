@@ -75,6 +75,16 @@ export interface Entry {
   line: string;
   /** Came from Obsidian's `%%…%%` rather than CriticMarkup braces. */
   native: boolean;
+  /**
+   * Written with its markers on their own lines.
+   *
+   * Reported rather than re-derived, for the reason `spans` exists: three
+   * consumers need it — both renderers and the drawer card — and each one
+   * working it out from marker lengths is how they come to disagree. True
+   * exactly when `isBlockForm` said so, which is also when the markers absorbed
+   * their adjacent newlines.
+   */
+  blockForm: boolean;
   /** Source geometry for the inline renderers. */
   spans: Spans;
 }
@@ -84,6 +94,8 @@ interface Raw extends Range {
   quote: string;
   replacement?: string;
   native: boolean;
+  /** Written with its markers on their own lines. See isBlockForm. */
+  blockForm: boolean;
   /** Marker runs belonging to this construct alone. */
   markers: Range[];
   /** Where `quote` sits — for a comment, where its body sits. */
@@ -202,6 +214,30 @@ const NATIVE_HIGHLIGHT_RE = /==([^\n]+?)==/g;
 /**
  * A construct whose body is one run: everything between a fixed-length opening
  * and closing marker. Covers every form except a substitution.
+ *
+ * In the block form a newline against the inside edge of a marker belongs to
+ * the marker rather than to the body. That one rule is what lets
+ *
+ *     {--
+ *     Zwei Absätze.
+ *
+ *     Und noch einer.
+ *     --}
+ *
+ * need no special handling anywhere else: the marker lines vanish whole in both
+ * display modes, the card shows the prose without a blank line at either end,
+ * and rejecting writes the passage back without the two newlines that were never
+ * part of it. Without the rule, rejecting a block-form cut leaves the note one
+ * blank line heavier above and below the restored passage, every time.
+ *
+ * It applies to the block form only, and that is not a refinement — it is what
+ * keeps the rule from destroying the case it looks most like. A merge is a
+ * substitution whose quoted half is a paragraph break and nothing else,
+ * `{~~\n\n~> ~~}`, and there the newlines are the entire content. Absorbing
+ * them leaves a mark that quotes nothing and substitutes nothing.
+ *
+ * `body.length > lead` guards the degenerate `{--\n--}`, where one newline
+ * would otherwise be claimed by both markers.
  */
 function simple(
   kind: Kind,
@@ -209,34 +245,59 @@ function simple(
   to: number,
   body: string,
   markerLen: number,
-  native: boolean
+  native: boolean,
+  blockForm = false
 ): Raw {
-  const bodyFrom = from + markerLen;
+  const lead = blockForm && body.startsWith('\n') ? 1 : 0;
+  const trail = blockForm && body.length > lead && body.endsWith('\n') ? 1 : 0;
+  const bodyFrom = from + markerLen + lead;
+  const bodyTo = to - markerLen - trail;
   return {
     kind,
     from,
     to,
-    quote: body,
+    quote: body.slice(lead, body.length - trail),
     native,
+    blockForm,
     markers: [
       { from, to: bodyFrom },
-      { from: to - markerLen, to },
+      { from: bodyTo, to },
     ],
-    quoteAt: { from: bodyFrom, to: to - markerLen },
+    quoteAt: { from: bodyFrom, to: bodyTo },
   };
 }
 
-/** A blank line ends a paragraph, and no construct may cross one. */
-const BLANK_LINE = /\n[ \t]*\n/;
+/**
+ * Whether a match was written with its markers on their own lines.
+ *
+ * Three conditions, and the first is the one that carries the weight: nothing
+ * but whitespace before the opening marker on its line. That is what tells a
+ * block-form cut from a merge — `…hinaus.{~~\n\n~> ~~}Der Regen…` has a
+ * sentence in front of its opener, so its newlines stay content.
+ *
+ * Deliberately silent about what follows the closing marker, because a note
+ * attaches there: `setComment` writes `{>>…<<}` flush against `to`, so
+ * requiring a clear line after the closer would make a block-form cut stop
+ * being one the moment the writer explained it.
+ */
+function isBlockForm(content: string, from: number, to: number, markerLen: number): boolean {
+  const lineStart = content.lastIndexOf('\n', from - 1) + 1;
+  return (
+    content.slice(lineStart, from).trim() === '' &&
+    content[from + markerLen] === '\n' &&
+    content[to - markerLen - 1] === '\n'
+  );
+}
 
 /**
  * A note's text, made safe to put inside its own markers.
  *
  * The format has no escape syntax, so what a body cannot hold is defused
- * rather than escaped. A blank line makes BLANK_LINE above refuse the whole
- * construct and the note stops rendering — the loudest possible failure for
- * the quietest possible keystroke. The closing marker ends the construct
- * early, truncating the note and spilling the rest into the manuscript.
+ * rather than escaped. A blank line inside a note is flattened rather than
+ * kept: a note is one remark, and the drawer shows it in a field that grows
+ * with its text but reads as one. The manuscript is where prose with
+ * paragraphs in it belongs. The closing marker ends the construct early,
+ * truncating the note and spilling the rest into the manuscript.
  *
  * A space goes into the sequence rather than the sequence being dropped: the
  * realistic collision is a German writer setting guillemets as >>Wort<< with a
@@ -268,63 +329,100 @@ export function sanitizeComment(text: string, close: '<<}' | '%%' = '<<}'): stri
   return flat.split('<<}').join('<< }');
 }
 
+/** The construct one regex match describes. */
+function rawAt(content: string, m: RegExpExecArray, from: number, to: number): Raw {
+  const blockForm = isBlockForm(content, from, to, 3);
+
+  if (m[1] !== undefined) return simple('insertion', from, to, m[1], 3, false, blockForm);
+  if (m[2] !== undefined) return simple('deletion', from, to, m[2], 3, false, blockForm);
+  if (m[4] !== undefined) return simple('highlight', from, to, m[4], 3, false, blockForm);
+  if (m[5] !== undefined) return simple('comment', from, to, m[5], 3, false, blockForm);
+
+  // Splits on the first ~>; a body without one is a malformed substitution and
+  // is treated as a deletion of exactly what it holds. checkMarkup says so on
+  // the card, because a writer who meant "replace" got "cut".
+  const body = m[3];
+  const arrow = body.indexOf('~>');
+  if (arrow === -1) return simple('deletion', from, to, body, 3, false, blockForm);
+
+  const lead = blockForm && body.startsWith('\n') ? 1 : 0;
+  const trail = blockForm && body.length > lead && body.endsWith('\n') ? 1 : 0;
+  const oldHalf = body.slice(lead, arrow);
+  const newHalf = body.slice(arrow + 2, body.length - trail);
+  // The arrow is a marker with an inside edge on both sides, so it takes a
+  // newline from each — which is what makes `{~~\nalt\n~>\nneu\n~~}` report
+  // `alt` and `neu` rather than `alt\n` and `\nneu`.
+  const oldTrail = blockForm && oldHalf.endsWith('\n') ? 1 : 0;
+  const newLead = blockForm && newHalf.startsWith('\n') ? 1 : 0;
+
+  const bodyFrom = from + 3 + lead;
+  const arrowFrom = from + 3 + arrow - oldTrail;
+  const arrowTo = from + 3 + arrow + 2 + newLead;
+  const bodyTo = to - 3 - trail;
+
+  return {
+    kind: 'substitution',
+    from,
+    to,
+    quote: oldHalf.slice(0, oldHalf.length - oldTrail),
+    replacement: newHalf.slice(newLead),
+    native: false,
+    blockForm,
+    markers: [
+      { from, to: bodyFrom },
+      { from: arrowFrom, to: arrowTo },
+      { from: bodyTo, to },
+    ],
+    quoteAt: { from: bodyFrom, to: arrowFrom },
+    replacementAt: { from: arrowTo, to: bodyTo },
+  };
+}
+
 function scanCritic(content: string, skip: Range[]): Raw[] {
+  return scanWindow(content, skip, 0, content.length);
+}
+
+/**
+ * Every construct between `from` and `to`, and every construct inside those.
+ *
+ * A window rather than a substring, so offsets stay absolute and no caller has
+ * to add anything back. Its own regex object rather than the module-level one,
+ * because the recursion would otherwise share `lastIndex` with its caller.
+ *
+ * Nesting is not a luxury here: it is what a mark spanning paragraphs produces.
+ * Wrap three paragraphs of an already-reviewed draft in a cut and the marks that
+ * were already there are now inside it.
+ *
+ * A body is scanned; a comment's body is not. Braces in a note are literal text
+ * — a note is a remark about the manuscript rather than part of it — and
+ * scanning one would turn `{>>siehe {--alt--}<<}` into a mark nobody wrote.
+ */
+function scanWindow(content: string, skip: Range[], from: number, to: number): Raw[] {
   const out: Raw[] = [];
-  CRITIC_RE.lastIndex = 0;
+  const re = new RegExp(CRITIC_RE.source, 'g');
+  re.lastIndex = from;
 
-  for (let m = CRITIC_RE.exec(content); m !== null; m = CRITIC_RE.exec(content)) {
-    const from = m.index;
-    const to = from + m[0].length;
+  for (let m = re.exec(content); m !== null; m = re.exec(content)) {
+    const start = m.index;
+    const end = start + m[0].length;
 
-    // An opening marker that only finds its partner several paragraphs later
-    // is a typo, not a construct — and honouring it would swallow whole
-    // paragraphs. Reading view cannot see across a block boundary either, so
-    // refusing here is also what keeps the two display modes agreeing.
-    //
-    // Resume one character in rather than past the match: a real construct
-    // sitting inside the rejected span still has to be found.
-    if (BLANK_LINE.test(m[0])) {
-      CRITIC_RE.lastIndex = from + 1;
-      continue;
-    }
+    // A match escaping the window means the text inside it is malformed and the
+    // closing marker it found belongs to something further out. Stopping is what
+    // leaves that marker for checkMarkup to report.
+    if (end > to) break;
+    if (overlaps(skip, start, end)) continue;
 
-    if (overlaps(skip, from, to)) continue;
+    const raw = rawAt(content, m, start, end);
+    out.push(raw);
 
-    if (m[1] !== undefined) {
-      out.push(simple('insertion', from, to, m[1], 3, false));
-    } else if (m[2] !== undefined) {
-      out.push(simple('deletion', from, to, m[2], 3, false));
-    } else if (m[3] !== undefined) {
-      // Splits on the first ~>; a body without one is a malformed substitution
-      // and is treated as a deletion of exactly what it holds.
-      const arrow = m[3].indexOf('~>');
-      if (arrow === -1) {
-        out.push(simple('deletion', from, to, m[3], 3, false));
-      } else {
-        const oldFrom = from + 3;
-        const arrowFrom = oldFrom + arrow;
-        const newFrom = arrowFrom + 2;
-        out.push({
-          kind: 'substitution',
-          from,
-          to,
-          quote: m[3].slice(0, arrow),
-          replacement: m[3].slice(arrow + 2),
-          native: false,
-          markers: [
-            { from, to: oldFrom },
-            { from: arrowFrom, to: newFrom },
-            { from: to - 3, to },
-          ],
-          quoteAt: { from: oldFrom, to: arrowFrom },
-          replacementAt: { from: newFrom, to: to - 3 },
-        });
+    if (raw.kind !== 'comment') {
+      out.push(...scanWindow(content, skip, raw.quoteAt.from, raw.quoteAt.to));
+      if (raw.replacementAt) {
+        out.push(...scanWindow(content, skip, raw.replacementAt.from, raw.replacementAt.to));
       }
-    } else if (m[4] !== undefined) {
-      out.push(simple('highlight', from, to, m[4], 3, false));
-    } else {
-      out.push(simple('comment', from, to, m[5], 3, false));
     }
+
+    re.lastIndex = end;
   }
 
   return out;
@@ -400,6 +498,8 @@ export function parseCritic(content: string): Entry[] {
         comment: raw.quote.trim(),
         line: lineAt(content, raw.from),
         native: raw.native,
+        // A note has no form. Where its own markers sit changes nothing about it.
+        blockForm: false,
         // The construct is hidden whole, so its own markers are not listed
         // separately — they are inside what gets replaced.
         spans: {
@@ -414,9 +514,15 @@ export function parseCritic(content: string): Entry[] {
     }
 
     const next = raws[i + 1];
+    // `next.from >= raw.to` is what stops a *nested* comment from being read as
+    // an attached one. Inside `{--foo{>>bar<<}--}` the comment starts before the
+    // deletion ends, so the slice runs backwards, returns the empty string, and
+    // the whitespace test passes — setting this entry's `to` to a point before
+    // its own closing marker and invalidating every offset downstream.
     const attached =
       next !== undefined &&
       next.kind === 'comment' &&
+      next.from >= raw.to &&
       /^[ \t]*$/.test(content.slice(raw.to, next.from));
 
     // A bare ==highlight== is ordinary markdown until a comment claims it.
@@ -431,6 +537,7 @@ export function parseCritic(content: string): Entry[] {
       comment: attached ? next.quote.trim() : null,
       line: lineAt(content, raw.from),
       native: raw.native,
+      blockForm: raw.blockForm,
       spans: {
         markers: raw.markers,
         quote: raw.quoteAt,
@@ -444,6 +551,93 @@ export function parseCritic(content: string): Entry[] {
   }
 
   return entries;
+}
+
+// ─── Checking ───
+
+export type FaultKind = 'unmatched-opener' | 'unmatched-closer' | 'no-arrow' | 'empty-body';
+
+/**
+ * Something wrong with the markup that the parser cannot report by failing.
+ *
+ * `entryFrom` is the join to the drawer: a fault belonging to a construct the
+ * parser accepted is drawn on that construct's card, because the card that
+ * renders wrong is the one that should carry the warning. A fault with no entry
+ * gets a row of its own.
+ */
+export interface Fault {
+  kind: FaultKind;
+  /** What to reveal in the editor: the marker, or the whole malformed construct. */
+  at: Range;
+  /** The entry this fault belongs to, or null when no entry claims it. */
+  entryFrom: number | null;
+}
+
+/** Every CriticMarkup marker, opening and closing. Obsidian's own are not here. */
+const TOKEN_RE = /\{\+\+|\+\+\}|\{--|--\}|\{~~|~~\}|\{==|==\}|\{>>|<<\}/g;
+
+/**
+ * Everything wrong with a note's markup, in document order.
+ *
+ * The point is that stray markup is silent. A marker that never finds its
+ * partner does not match, so the braces sit in the prose as ordinary text and
+ * nothing tells the writer — a failure the plugin has always had and never
+ * reported.
+ *
+ * Derived from `parseCritic` rather than forming a second opinion about what
+ * counts as markup, for the reason every renderer here reads its geometry from
+ * one parse: two opinions eventually differ, and the difference looks like the
+ * plugin lying about one of them.
+ *
+ * A marker inside a comment counts as consumed, because a note's braces are
+ * literal text. That falls out of `spans.comment` covering the whole construct.
+ */
+export function checkMarkup(content: string): Fault[] {
+  const skip = skipRegions(content);
+  const entries = parseCritic(content);
+  const faults: Fault[] = [];
+
+  const consumed: Range[] = [];
+  for (const entry of entries) {
+    for (const marker of entry.spans.markers) {
+      if (marker.to > marker.from) consumed.push(marker);
+    }
+    if (entry.spans.comment !== null) consumed.push(entry.spans.comment);
+  }
+
+  TOKEN_RE.lastIndex = 0;
+  for (let m = TOKEN_RE.exec(content); m !== null; m = TOKEN_RE.exec(content)) {
+    const at = { from: m.index, to: m.index + m[0].length };
+    if (overlaps(skip, at.from, at.to)) continue;
+    if (consumed.some((r) => at.from >= r.from && at.to <= r.to)) continue;
+    faults.push({
+      kind: m[0].startsWith('{') ? 'unmatched-opener' : 'unmatched-closer',
+      at,
+      entryFrom: null,
+    });
+  }
+
+  for (const entry of entries) {
+    if (entry.native) continue;
+    const at = { from: entry.from, to: entry.to };
+
+    // A `{~~…~~}` the parser had to read as a deletion, because there was no
+    // arrow to split on. The writer meant "replace" and got "cut".
+    if (entry.kind === 'deletion' && content.startsWith('{~~', entry.from)) {
+      faults.push({ kind: 'no-arrow', at, entryFrom: entry.from });
+      continue;
+    }
+
+    // An empty deletion or highlight is malformed rather than half-written — no
+    // command produces one. An empty insertion or replacement is the opposite:
+    // that is exactly what `Suggest a change` writes, and the placeholder stands
+    // in it until the words arrive.
+    if ((entry.kind === 'deletion' || entry.kind === 'highlight') && entry.quote === '') {
+      faults.push({ kind: 'empty-body', at, entryFrom: entry.from });
+    }
+  }
+
+  return faults.sort((a, b) => a.at.from - b.at.from);
 }
 
 // ─── Transforms ───
@@ -514,6 +708,14 @@ function applyEdits(content: string, edits: Edit[]): string {
         // the surrounding paragraphs close up instead of gaining a gap.
         to = atEof ? lineEnd : lineEnd + 1;
         if (atEof && lineStart > 0) from = lineStart - 1;
+
+        // A mark that sat between two blank lines leaves two behind: the one
+        // above it and the one below. Take one of them, so the paragraphs it
+        // stood between end up separated the way every other pair in the note
+        // is. Both sides have to be blank — with text on either side the single
+        // newline above is the separator, and removing it would join two
+        // paragraphs that were never meant to join.
+        if (from > 0 && out[from - 1] === '\n' && out[to] === '\n') to++;
       }
     }
 
@@ -586,7 +788,33 @@ export function setComment(content: string, entry: Entry, text: string): string 
  * Both constructs are written empty on purpose. The words are typed into the
  * manuscript afterwards, which is where manuscript text belongs.
  */
-export function suggestChange(selection: string): { text: string; caret: number } | null {
+/**
+ * Whether a selection should be wrapped with its markers on their own lines.
+ *
+ * `block` when the selection crosses a paragraph boundary **and** both its edges
+ * sit on one. Anything else is `inline`, and that is what makes a paragraph
+ * merge expressible rather than a special case: markers inside two sentences say
+ * "join these paragraphs", markers on their own lines say "these whole
+ * paragraphs".
+ *
+ * One whole paragraph is deliberately `inline`. The block form would add two
+ * lines of syntax and change nothing about how the mark renders or resolves.
+ */
+export function wrapForm(content: string, from: number, to: number): 'inline' | 'block' {
+  if (!/\n[ \t]*\n/.test(content.slice(from, to))) return 'inline';
+
+  const before = content.slice(0, from);
+  const after = content.slice(to);
+  const atParagraphStart = before === '' || /(?:^|\n)[ \t]*\n[ \t]*$/.test(before);
+  const atParagraphEnd = after === '' || /^[ \t]*\n[ \t]*(?:\n|$)/.test(after);
+
+  return atParagraphStart && atParagraphEnd ? 'block' : 'inline';
+}
+
+export function suggestChange(
+  selection: string,
+  form: 'inline' | 'block' = 'inline'
+): { text: string; caret: number } | null {
   if (selection === '') return { text: '{++++}', caret: 3 };
 
   // A selection carrying either of the substitution's own markers cannot be
@@ -595,20 +823,73 @@ export function suggestChange(selection: string): { text: string; caret: number 
   // same reason resolvedText throws rather than picking an outcome.
   if (selection.includes('~>') || selection.includes('~~}')) return null;
 
+  // The block form's arrow sits on its own line. isBlockForm recognises what
+  // this writes, so simple() gives each marker the newline against its inside
+  // edge and the construct parses back with the quoted half exactly `selection`
+  // and the replacement exactly empty — which is also what puts the caret on the
+  // boundary between the arrow marker and the closing one, the only position in
+  // an empty replacement it can hold.
+  if (form === 'block') {
+    return { text: `{~~\n${selection}\n~>\n~~}`, caret: 3 + 1 + selection.length + 1 + 2 };
+  }
+
   return { text: `{~~${selection}~>~~}`, caret: 3 + selection.length + 2 };
 }
 
+/**
+ * How many marks contain `entry`.
+ *
+ * The drawer indents a card by this, which is how it says that settling the mark
+ * above erases this one — without a label having to say so.
+ */
+export function nestingDepth(entries: readonly Entry[], entry: Entry): number {
+  return entries.filter((o) => o !== entry && o.from <= entry.from && o.to >= entry.to).length;
+}
+
+/** The entries no other entry contains, in document order. */
+function topLevel(entries: Entry[]): Entry[] {
+  return entries.filter(
+    (e) => !entries.some((o) => o !== e && o.from <= e.from && o.to >= e.to)
+  );
+}
+
+/**
+ * Settles every mark in a note, innermost first.
+ *
+ * Two steps rather than one, because `applyEdits` requires its edits not to
+ * overlap and nested entries overlap by definition. Only the top-level marks
+ * become edits; what each one resolves to is settled recursively first.
+ *
+ * Rejecting is what forces this order. Rejecting a cut keeps its quoted text
+ * verbatim, and that text can still hold a mark — so settling the outer one
+ * first would leave markup in a note that had just been declared settled. Worse
+ * than leaving it: the outer edit carries offsets taken before the inner edit
+ * shortened the string, so it overwrites whatever the inner one wrote.
+ */
 function renderAll(content: string, suggestionMode: 'accept' | 'reject'): string {
-  const edits = parseCritic(content).map((entry) => ({
+  const edits = topLevel(parseCritic(content)).map((entry) => ({
     from: entry.from,
     to: entry.to,
-    // Annotations have no accept/reject distinction — they resolve either way.
-    text: resolvedText(
-      entry,
-      entry.kind === 'highlight' || entry.kind === 'comment' ? 'resolve' : suggestionMode
-    ),
+    text: resolveDeep(entry, suggestionMode),
   }));
   return applyEdits(content, edits);
+}
+
+/**
+ * What one mark resolves to, with any mark inside it resolved first.
+ *
+ * The recursion terminates because every pass removes at least one construct's
+ * markers, so the string it recurses on is strictly shorter. The `includes`
+ * guard keeps it from re-parsing prose that plainly holds nothing — which also
+ * spares a fragment beginning with `---` from being read as frontmatter.
+ */
+function resolveDeep(entry: Entry, suggestionMode: 'accept' | 'reject'): string {
+  // Annotations have no accept/reject distinction — they resolve either way.
+  const text = resolvedText(
+    entry,
+    entry.kind === 'highlight' || entry.kind === 'comment' ? 'resolve' : suggestionMode
+  );
+  return text.includes('{') ? renderAll(text, suggestionMode) : text;
 }
 
 /**

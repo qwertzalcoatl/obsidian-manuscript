@@ -18,12 +18,16 @@ import {
 } from 'obsidian';
 import {
   applyEntry,
+  checkMarkup,
   minimalEdit,
+  nestingDepth,
   parseCritic,
   renderAccepted,
   renderRejected,
   setComment,
   type Entry,
+  type Fault,
+  type FaultKind,
   type Mode,
 } from './critic';
 import { parseEditorial, type EditorialBlock } from './editorial';
@@ -39,13 +43,29 @@ import { flashEntry, flashRange } from './critic-render';
  * settle, the other is prose about the passage.
  */
 type Row =
-  | { type: 'mark'; card: Card }
-  | { type: 'editorial'; block: EditorialBlock };
+  | { type: 'mark'; card: Card; depth: number }
+  | { type: 'editorial'; block: EditorialBlock }
+  | { type: 'problem'; fault: Fault };
 
 /** Where a row begins in the sheet, which is also what its card is stamped with. */
 function rowFrom(row: Row): number {
-  return row.type === 'mark' ? row.card.entry.from : row.block.from;
+  if (row.type === 'mark') return row.card.entry.from;
+  if (row.type === 'editorial') return row.block.from;
+  return row.fault.at.from;
 }
+
+/**
+ * What a fault says on its card.
+ *
+ * Here rather than in critic.ts, which carries no user-facing copy: the parser
+ * reports what is wrong, and the drawer is what says it in a sentence.
+ */
+const FAULT_TEXT: Record<FaultKind, string> = {
+  'unmatched-opener': 'An opening marker with no closing marker.',
+  'unmatched-closer': 'A closing marker with no opening marker.',
+  'no-arrow': 'No ~> in this mark, so it reads as a cut rather than a replacement.',
+  'empty-body': 'This mark has nothing in it.',
+};
 
 export const VIEW_TYPE_REVIEW = 'manuscript-review';
 
@@ -119,6 +139,16 @@ export class ReviewView extends ItemView {
    * editorial comment cannot reach the toolbar count.
    */
   private blocks: EditorialBlock[] = [];
+  /**
+   * What is wrong with the sheet's markup, which is a third kind of row.
+   *
+   * A broken marker is the least finished thing in a note and the only one the
+   * writer cannot be told about any other way — it does not parse, so it has no
+   * card of its own to appear on and no decoration to catch the eye.
+   */
+  private faults: Fault[] = [];
+  /** The sheet's text as last read, so a fault row can quote the marker itself. */
+  private rawText = '';
   private file: TFile | null = null;
   private refreshTimer: number | null = null;
   /**
@@ -314,6 +344,8 @@ export class ReviewView extends ItemView {
     if (!this.file) {
       this.cards = [];
       this.blocks = [];
+      this.faults = [];
+      this.rawText = '';
       this.paint();
       return;
     }
@@ -327,10 +359,14 @@ export class ReviewView extends ItemView {
         raw: content.slice(entry.from, entry.to),
       }));
       this.blocks = parseEditorial(content);
+      this.faults = checkMarkup(content);
+      this.rawText = content;
     } catch (err) {
       console.error('Manuscript: could not read the sheet for review', err);
       this.cards = [];
       this.blocks = [];
+      this.faults = [];
+      this.rawText = '';
     }
     this.paint();
   }
@@ -365,9 +401,19 @@ export class ReviewView extends ItemView {
    * step. Neither list is long enough for the sort to matter.
    */
   private rows(): Row[] {
+    const entries = this.cards.map((c) => c.entry);
     const rows: Row[] = [
-      ...this.cards.map((card) => ({ type: 'mark' as const, card })),
+      ...this.cards.map((card) => ({
+        type: 'mark' as const,
+        card,
+        depth: nestingDepth(entries, card.entry),
+      })),
       ...this.blocks.map((block) => ({ type: 'editorial' as const, block })),
+      // A fault that belongs to a construct is drawn on that construct's card
+      // instead — see buildCard.
+      ...this.faults
+        .filter((fault) => fault.entryFrom === null)
+        .map((fault) => ({ type: 'problem' as const, fault })),
     ];
     return rows.sort((a, b) => rowFrom(a) - rowFrom(b));
   }
@@ -380,10 +426,16 @@ export class ReviewView extends ItemView {
    * two.
    */
   private rowStartCovering(offset: number): number | null {
-    const card = this.cards.find((c) => offset >= c.entry.from && offset < c.entry.to);
-    if (card) return card.entry.from;
-    const block = this.blocks.find((b) => offset >= b.from && offset < b.to);
-    return block ? block.from : null;
+    // Narrowest wins: with nesting, a click inside an inner mark is also inside
+    // the mark containing it, and the card the reader meant is the inner one.
+    let best: { from: number; width: number } | null = null;
+    const consider = (from: number, to: number) => {
+      if (offset < from || offset >= to) return;
+      if (best === null || to - from < best.width) best = { from, width: to - from };
+    };
+    for (const card of this.cards) consider(card.entry.from, card.entry.to);
+    for (const block of this.blocks) consider(block.from, block.to);
+    return best === null ? null : (best as { from: number; width: number }).from;
   }
 
   private paint(): void {
@@ -411,7 +463,7 @@ export class ReviewView extends ItemView {
       return;
     }
 
-    if (this.cards.length === 0 && this.blocks.length === 0) {
+    if (this.cards.length === 0 && this.blocks.length === 0 && this.faults.length === 0) {
       this.listEl
         .createDiv({ cls: 'ms-review-empty' })
         .setText(
@@ -423,7 +475,11 @@ export class ReviewView extends ItemView {
     const fragment = document.createDocumentFragment();
     for (const row of this.rows()) {
       fragment.appendChild(
-        row.type === 'mark' ? this.buildCard(row.card) : this.buildEditorialCard(row.block)
+        row.type === 'mark'
+          ? this.buildCard(row.card, row.depth)
+          : row.type === 'editorial'
+            ? this.buildEditorialCard(row.block)
+            : this.buildProblemCard(row.fault)
       );
     }
     this.listEl.appendChild(fragment);
@@ -467,9 +523,15 @@ export class ReviewView extends ItemView {
     }
   }
 
-  private buildCard(card: Card): HTMLElement {
+  private buildCard(card: Card, depth: number): HTMLElement {
     const { entry } = card;
     const el = createDiv({ cls: 'ms-review-card' });
+    // A mark inside another mark. The indent is the whole statement: settling
+    // the card above erases this one, and a step to the right says so.
+    if (depth > 0) {
+      el.addClass('is-nested');
+      el.style.setProperty('--ms-nesting', String(depth));
+    }
     el.dataset.kind = entry.kind;
     // How every other part of this view finds this element again. See cardEl.
     el.dataset.offset = String(entry.from);
@@ -477,6 +539,11 @@ export class ReviewView extends ItemView {
 
     const quote = el.createDiv({ cls: 'ms-review-quote' });
     this.paintQuote(quote, entry);
+
+    // A fault belonging to this construct is drawn on this construct's card: the
+    // card that renders wrong is the one that should carry the warning.
+    const fault = this.faults.find((f) => f.entryFrom === entry.from);
+    if (fault) el.createDiv({ cls: 'ms-review-problem' }).setText(FAULT_TEXT[fault.kind]);
 
     if (this.editing?.offset === entry.from) {
       this.buildNoteField(el, card);
@@ -543,6 +610,42 @@ export class ReviewView extends ItemView {
    * editorial comment may run to paragraphs of which the card shows two lines.
    * It is deleted in the manuscript, where it can be read first.
    */
+  /**
+   * A broken marker's card.
+   *
+   * No actions, for the reason an editorial card has none: nothing here can be
+   * settled, because the markup does not say anything yet. Clicking it puts the
+   * marker under the reader's eye in the manuscript, which is where it is
+   * repaired — `Show markup source at cursor` is the tool for that.
+   *
+   * Because it never writes, `stillThere` and the `editing` record need nothing
+   * from it.
+   */
+  private buildProblemCard(fault: Fault): HTMLElement {
+    const el = createDiv({ cls: 'ms-review-card' });
+    el.dataset.kind = 'problem';
+    el.dataset.offset = String(fault.at.from);
+    el.tabIndex = 0;
+
+    el.createDiv({ cls: 'ms-review-problem' }).setText(FAULT_TEXT[fault.kind]);
+    // The marker and a little of what follows it, so the card says *which* one.
+    el.createDiv({ cls: 'ms-review-quote' }).setText(
+      this.rawText.slice(fault.at.from, Math.min(fault.at.from + 40, this.rawText.length))
+    );
+
+    const reveal = () => this.revealRange(fault.at.from, fault.at.to);
+    el.addEventListener('click', reveal);
+    el.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.target !== el) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        reveal();
+      }
+    });
+
+    return el;
+  }
+
   private buildEditorialCard(block: EditorialBlock): HTMLElement {
     const el = createDiv({ cls: 'ms-review-card' });
     el.dataset.kind = 'editorial';
@@ -578,7 +681,14 @@ export class ReviewView extends ItemView {
       return;
     }
 
-    const span = (text: string, cls: string) => el.createSpan({ cls }).setText(text);
+    // A break inside an inline mark is part of what the mark changes, so the card
+    // shows it the way the editor does. In the block form the breaks are
+    // paragraph separators and the card sets them as breaks — see the white-space
+    // rule on .ms-review-quote.
+    const withBreaks = (text: string) => (entry.blockForm ? text : text.replace(/\n/g, '¶'));
+
+    const span = (text: string, cls: string) =>
+      el.createSpan({ cls }).setText(withBreaks(text));
     // The manuscript's own placeholder, on the card. A construct you have
     // started but not written into is an entry like any other, so it gets a
     // card — and without this the card is a blank line. Exact emptiness rather

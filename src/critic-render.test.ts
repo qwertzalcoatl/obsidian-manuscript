@@ -100,10 +100,13 @@ describe('renderCriticMarkup — several entries at once', () => {
     expect(root.textContent).toBe('Erste weg.Zweite neu.');
   });
 
-  it('does not join a construct across two paragraphs', () => {
-    // The opening marker never finds its close, so both stay literal.
+  // The parser is given one block at a time and cannot pair the two markers, so
+  // it styles neither — but it hides both, because a brace shown to a reader is
+  // worse than a passage left unstyled. Supplying the note's source is what lets
+  // the passage be styled as well; see the SectionSource cases below.
+  it('hides both markers of a mark it cannot pair across two paragraphs', () => {
     const root = render('<p>Erste {--offen</p><p>Zweite --} zu.</p>');
-    expect(root.textContent).toBe('Erste {--offenZweite --} zu.');
+    expect(root.textContent).toBe('Erste offenZweite  zu.');
   });
 });
 
@@ -113,8 +116,11 @@ describe('renderCriticMarkup — what it leaves alone', () => {
     expect(render(html).innerHTML).toBe(html);
   });
 
-  it('leaves an unterminated marker literal', () => {
-    expect(textOf('<p>Sie {++ ging fort.</p>')).toBe('Sie {++ ging fort.');
+  // It used to stay literal, which was the silent failure: braces that do not
+  // parse look exactly like braces the writer meant. The prose is untouched;
+  // only the marker goes. The drawer is where the writer is told why.
+  it('hides an unterminated marker and keeps the prose', () => {
+    expect(textOf('<p>Sie {++ ging fort.</p>')).toBe('Sie  ging fort.');
   });
 
   it('leaves markup inside a code element alone', () => {
@@ -186,5 +192,95 @@ describe('renderCriticMarkup — the substitution separator', () => {
     const root = render('<p>Sie {++leise ++}ging.</p>');
     expect(root.querySelector('.ms-critic-arrow')).toBeNull();
     expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('leise ');
+  });
+});
+
+describe('renderCriticMarkup — a mark that spans two blocks', () => {
+  it('hides an unmatched marker rather than showing braces', () => {
+    const root = render('<p>Sie ging{-- fort.</p><p>Der Regen--} blieb.</p>');
+    expect(root.textContent).toBe('Sie ging fort.Der Regen blieb.');
+  });
+
+  it('leaves an unmatched marker inside code alone', () => {
+    const root = render('<p>So schreibt man <code>{--</code> hin.</p>');
+    expect(root.textContent).toBe('So schreibt man {-- hin.');
+  });
+});
+
+describe('renderCriticMarkup — a mark inside a mark', () => {
+  // The whole cut has to be struck through, not just the part before the mark
+  // inside it. Anything less and a reader cannot see where the cut ends.
+  it('strikes the whole cut, the mark inside it included', () => {
+    const root = render('<p>{--Sie zählte {~~Dann~>Schließlich~~} Ende.--}</p>');
+    expect(root.textContent).toBe('Sie zählte Dann→Schließlich Ende.');
+
+    const outer = root.querySelector('.ms-critic-deletion');
+    expect(outer?.textContent).toBe('Sie zählte Dann→Schließlich Ende.');
+    expect(root.querySelectorAll('.ms-critic-insertion')).toHaveLength(1);
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('Schließlich');
+    // And the replacement sits inside the cut, so it wears both treatments:
+    // proposed wording that the cut would take away with it.
+    expect(outer?.querySelector('.ms-critic-insertion')).not.toBeNull();
+  });
+
+  it('keeps every character of a nested highlight, and underlines all of it', () => {
+    const root = render('<p>{++neu {==wichtig==} da++}</p>');
+    expect(root.textContent).toBe('neu wichtig da');
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('neu wichtig da');
+    expect(root.querySelector('.ms-critic-highlight')?.textContent).toBe('wichtig');
+  });
+
+  it('nests a mark that itself wraps inline markdown', () => {
+    const root = render('<p>{--weg <strong>fett</strong> {++neu++} da--}</p>');
+    expect(root.textContent).toBe('weg fett neu da');
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('neu');
+  });
+});
+
+describe('renderCriticMarkup — a mark across blocks, with the source', () => {
+  const SOURCE = 'Sie ging{-- fort.\n\nDer Regen--} blieb.';
+
+  /** Renders one block with the section info Obsidian would supply. */
+  function renderBlock(html: string, lineStart: number, lineEnd: number): HTMLElement {
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    renderCriticMarkup(root, { text: SOURCE, lineStart, lineEnd });
+    return root;
+  }
+
+  it('strikes the tail of the block the mark opens in', () => {
+    const root = renderBlock('<p>Sie ging{-- fort.</p>', 0, 0);
+    expect(root.textContent).toBe('Sie ging fort.');
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe(' fort.');
+  });
+
+  it('strikes the head of the block the mark closes in', () => {
+    const root = renderBlock('<p>Der Regen--} blieb.</p>', 2, 2);
+    expect(root.textContent).toBe('Der Regen blieb.');
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe('Der Regen');
+  });
+
+  it('strikes a whole block that lies inside the mark', () => {
+    const source = 'a{--\n\nmitten\n\nb--}';
+    const root = document.createElement('div');
+    root.innerHTML = '<p>mitten</p>';
+    renderCriticMarkup(root, { text: source, lineStart: 2, lineEnd: 2 });
+    expect(root.querySelector('.ms-critic-deletion')?.textContent).toBe('mitten');
+  });
+
+  it('falls back to hiding the marker when no source is supplied', () => {
+    const bare = document.createElement('div');
+    bare.innerHTML = '<p>Sie ging{-- fort.</p>';
+    renderCriticMarkup(bare);
+    expect(bare.textContent).toBe('Sie ging fort.');
+    expect(bare.querySelector('.ms-critic-deletion')).toBeNull();
+  });
+
+  it('removes a block that held nothing but a marker line', () => {
+    const source = 'A.\n\n{--\nP1\n--}\n\nB.';
+    const root = document.createElement('div');
+    root.innerHTML = '<p>{--</p>';
+    renderCriticMarkup(root, { text: source, lineStart: 2, lineEnd: 2 });
+    expect(root.querySelector('p')).toBeNull();
   });
 });

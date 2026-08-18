@@ -1,12 +1,15 @@
 import {
+  checkMarkup,
   parseCritic,
   applyEntry,
   minimalEdit,
+  nestingDepth,
   renderAccepted,
   renderRejected,
   sanitizeComment,
   setComment,
   suggestChange,
+  wrapForm,
   type Entry,
 } from './critic';
 
@@ -176,19 +179,32 @@ describe('parseCritic — tolerance', () => {
     expect(e.quote).toBe('alter\nText');
   });
 
-  // Reading view groups text by block and cannot see across a paragraph
-  // boundary; if the parser could, the two display modes would disagree. It
-  // also bounds the damage of a stray opening marker.
-  it('refuses a construct that crosses a blank line', () => {
-    expect(parseCritic('Ein {++neuer\n\nAbsatz++} hier.')).toEqual([]);
-    expect(parseCritic('{>>oben\n\nunten<<}')).toEqual([]);
+  it('reads a deletion that crosses a blank line', () => {
+    const src = 'Sie stand am Fenster{-- und sah hinaus.\n\nDer Regen--} hatte aufgehört.';
+    const e = one(src);
+    expect(e.kind).toBe('deletion');
+    expect(e.quote).toBe(' und sah hinaus.\n\nDer Regen');
   });
 
-  it('still finds a real construct inside a rejected span', () => {
-    const entries = parseCritic('{++ vergessen\n\nspäter {--echt--} hier ++}');
-    expect(entries).toHaveLength(1);
-    expect(entries[0].kind).toBe('deletion');
-    expect(entries[0].quote).toBe('echt');
+  it('reads an insertion that crosses a blank line', () => {
+    const e = one('Ein {++neuer\n\nAbsatz++} hier.');
+    expect(e.kind).toBe('insertion');
+    expect(e.quote).toBe('neuer\n\nAbsatz');
+  });
+
+  it('reads a comment that crosses a blank line', () => {
+    const e = one('{>>oben\n\nunten<<}');
+    expect(e.kind).toBe('comment');
+    expect(e.comment).toBe('oben\n\nunten');
+  });
+
+  // The merge of the design spec: the quoted half is the paragraph break
+  // itself, and accepting it makes one paragraph out of two.
+  it('reads a substitution whose quoted half is a paragraph break', () => {
+    const e = one('…hinaus.{~~\n\n~> ~~}Der Regen…');
+    expect(e.kind).toBe('substitution');
+    expect(e.quote).toBe('\n\n');
+    expect(e.replacement).toBe(' ');
   });
 
   it('reads two adjacent constructs as two entries, not a substitution', () => {
@@ -774,5 +790,273 @@ describe('suggestChange — what the command writes', () => {
 
   it('accepts a selection with a lone tilde, which breaks nothing', () => {
     expect(suggestChange('a~b')).toEqual({ text: '{~~a~b~>~~}', caret: 8 });
+  });
+});
+
+describe('parseCritic — the block form', () => {
+  const BLOCK = 'A.\n\n{--\nP1\n\nP2\n--}\n\nB.';
+
+  it('leaves the newlines beside the markers out of the quote', () => {
+    const e = one(BLOCK);
+    expect(e.kind).toBe('deletion');
+    expect(e.quote).toBe('P1\n\nP2');
+  });
+
+  it('gives each marker the newline against its inside edge', () => {
+    const e = one(BLOCK);
+    // '{--\n' and '\n--}', four characters each.
+    expect(e.spans.markers).toEqual([
+      { from: 4, to: 8 },
+      { from: 14, to: 18 },
+    ]);
+    expect(e.spans.quote).toEqual({ from: 8, to: 14 });
+  });
+
+  it('restores the passage with no blank line gained, on reject', () => {
+    expect(applyEntry(BLOCK, one(BLOCK), 'reject')).toBe('A.\n\nP1\n\nP2\n\nB.');
+  });
+
+  it('closes the gap on accept', () => {
+    expect(applyEntry(BLOCK, one(BLOCK), 'accept')).toBe('A.\n\nB.');
+  });
+
+  it('reads a block-form substitution', () => {
+    const e = one('{~~\nalt\n~>\nneu\n~~}');
+    expect(e.kind).toBe('substitution');
+    expect(e.quote).toBe('alt');
+    expect(e.replacement).toBe('neu');
+  });
+
+  it('counts a lone newline once', () => {
+    const e = one('{--\n--}');
+    expect(e.quote).toBe('');
+  });
+
+  // The same rule improves the single-line case, which used to leave the note
+  // with one blank line more than it started with.
+  it('closes the gap around a resolved own-line comment', () => {
+    const src = 'A.\n\n{>>note<<}\n\nB.';
+    expect(applyEntry(src, one(src), 'resolve')).toBe('A.\n\nB.');
+  });
+});
+
+describe('parseCritic — marks inside marks', () => {
+  it('reads a substitution inside a deletion', () => {
+    const es = parseCritic('{--Sie zählte. {~~Dann~>Schließlich~~} Ende.--}');
+    expect(es).toHaveLength(2);
+    expect(es[0].kind).toBe('deletion');
+    expect(es[1].kind).toBe('substitution');
+    expect(es[1].from).toBeGreaterThan(es[0].from);
+    expect(es[1].to).toBeLessThan(es[0].to);
+  });
+
+  it('reads a deletion inside an insertion across a blank line', () => {
+    const es = parseCritic('{++ vergessen\n\nspäter {--echt--} hier ++}');
+    expect(es.map((e) => e.kind)).toEqual(['insertion', 'deletion']);
+    expect(es[1].quote).toBe('echt');
+  });
+
+  // Braces in a note are literal text. A comment is a remark about the
+  // manuscript, not part of it, so nothing inside one is a mark.
+  it('leaves braces inside a comment body alone', () => {
+    const es = parseCritic('{>>siehe {--alt--}<<}');
+    expect(es).toHaveLength(1);
+    expect(es[0].kind).toBe('comment');
+    expect(es[0].comment).toBe('siehe {--alt--}');
+  });
+
+  // The one case the format cannot express: the first closing marker has no
+  // way to say which opener it belongs to.
+  it('closes same-kind nesting at the first closer', () => {
+    const es = parseCritic('{--a {--b--} c--}');
+    expect(es).toHaveLength(1);
+    expect(es[0].quote).toBe('a {--b');
+  });
+
+  // Only the recursion can reach this. `slice(raw.to, next.from)` runs
+  // backwards for a nested comment, returns the empty string, and the
+  // whitespace test passes — which used to set the outer entry's end to a
+  // point before its own closing marker.
+  it('does not attach a comment that sits inside the mark before it', () => {
+    const src = '{--foo{>>bar<<}--}';
+    const es = parseCritic(src);
+    expect(es).toHaveLength(2);
+    expect(es[0].to).toBe(src.length);
+    expect(es[0].comment).toBeNull();
+    expect(es[1].kind).toBe('comment');
+    expect(es[1].comment).toBe('bar');
+  });
+
+  it('still attaches a comment that follows a nested mark', () => {
+    const es = parseCritic('{--foo {==bar==}{>>warum<<} baz--}');
+    expect(es).toHaveLength(2);
+    expect(es[0].kind).toBe('deletion');
+    expect(es[1].kind).toBe('highlight');
+    expect(es[1].comment).toBe('warum');
+  });
+});
+
+describe('renderAccepted / renderRejected — nested marks', () => {
+  const NESTED = '{--Sie zählte. {~~Dann~>Schließlich~~} Ende.--}';
+
+  it('accepting the cut takes the mark inside it too', () => {
+    expect(renderAccepted(NESTED)).toBe('');
+  });
+
+  // The case that forces inside-out order. Rejecting a cut keeps its quoted
+  // text verbatim, and that text still holds a substitution.
+  it('rejecting the cut leaves no markup behind', () => {
+    expect(renderRejected(NESTED)).toBe('Sie zählte. Dann Ende.');
+  });
+
+  it('accepting an insertion keeps the resolved text of a mark inside it', () => {
+    expect(renderAccepted('{++neu {--weg--} da++}')).toBe('neu  da');
+  });
+
+  it('rejecting an insertion drops what was inside it', () => {
+    expect(renderRejected('{++neu {--weg--} da++}')).toBe('');
+  });
+});
+
+describe('checkMarkup', () => {
+  const kinds = (content: string) => checkMarkup(content).map((f) => f.kind);
+
+  it('finds nothing in a note whose marks are all closed', () => {
+    expect(checkMarkup('Sie {--ging--} fort. {++leise++}')).toEqual([]);
+  });
+
+  it('reports an opening marker with no closing marker', () => {
+    const faults = checkMarkup('Sie {-- ging fort.');
+    expect(faults).toHaveLength(1);
+    expect(faults[0].kind).toBe('unmatched-opener');
+    expect(faults[0].at).toEqual({ from: 4, to: 7 });
+    expect(faults[0].entryFrom).toBeNull();
+  });
+
+  it('reports a closing marker with no opening marker', () => {
+    expect(kinds('Sie ging fort--} und blieb.')).toEqual(['unmatched-closer']);
+  });
+
+  it('reports both, in document order', () => {
+    expect(kinds('a ++} b {-- c')).toEqual(['unmatched-closer', 'unmatched-opener']);
+  });
+
+  // Legal nesting. This was on an earlier draft of the fault list in error.
+  it('says nothing about a mark inside a mark', () => {
+    expect(checkMarkup('{--a {++b++} c--}')).toEqual([]);
+  });
+
+  // Same-kind nesting is the one case the format cannot express. The outer mark
+  // closes at the first closer it meets, which leaves the inner opener with
+  // nothing to close it and the last closer with nothing that opened it. Both
+  // are true, and saying both is what tells the writer where the two ends are.
+  it('reports both ends of same-kind nesting', () => {
+    expect(kinds('{--a {--b--} c--}')).toEqual(['unmatched-opener', 'unmatched-closer']);
+    expect(checkMarkup('{--a {--b--} c--}').map((f) => f.at.from)).toEqual([5, 14]);
+  });
+
+  it('ignores markers in fenced code, inline code and frontmatter', () => {
+    expect(checkMarkup('---\ntitle: {--\n---\n\n`{--` und\n\n```\n{--\n```\n')).toEqual([]);
+  });
+
+  it('reports a substitution with no arrow, against its own entry', () => {
+    const src = '{~~Dann drehte sie sich um~~}';
+    const faults = checkMarkup(src);
+    expect(faults).toHaveLength(1);
+    expect(faults[0].kind).toBe('no-arrow');
+    expect(faults[0].entryFrom).toBe(0);
+    expect(faults[0].at).toEqual({ from: 0, to: src.length });
+  });
+
+  it('reports an empty body, against its own entry', () => {
+    expect(kinds('{----}')).toEqual(['empty-body']);
+    expect(kinds('{====}')).toEqual(['empty-body']);
+  });
+
+  // An empty replacement is a half-written suggestion, not a malformed mark:
+  // `Suggest a change` writes exactly that and the placeholder stands in it.
+  it('says nothing about an insertion or a replacement still being typed', () => {
+    expect(checkMarkup('{++++}')).toEqual([]);
+    expect(checkMarkup('{~~alt~>~~}')).toEqual([]);
+  });
+
+  // A lone `%%` or `==` is ordinary Obsidian markdown far more often than it
+  // is a broken mark.
+  it('says nothing about Obsidian’s own markers', () => {
+    expect(checkMarkup('Ein ==Wort== und %% eine Notiz %%')).toEqual([]);
+  });
+});
+
+describe('wrapForm', () => {
+  const SHEET = 'A.\n\nP1\n\nP2\n\nB.';
+
+  it('asks for the block form when whole paragraphs are selected', () => {
+    expect(wrapForm(SHEET, 4, 10)).toBe('block');
+  });
+
+  it('asks for the inline form for one whole paragraph', () => {
+    expect(wrapForm(SHEET, 4, 6)).toBe('inline');
+  });
+
+  it('asks for the inline form from mid-sentence to mid-sentence', () => {
+    const src = 'Sie stand am Fenster und sah hinaus.\n\nDer Regen hatte aufgehört.';
+    expect(wrapForm(src, 20, 44)).toBe('inline');
+  });
+
+  it('asks for the block form for a whole note of two paragraphs', () => {
+    const src = 'P1\n\nP2';
+    expect(wrapForm(src, 0, src.length)).toBe('block');
+  });
+
+  it('asks for the inline form when only the start is clean', () => {
+    expect(wrapForm(SHEET, 4, 9)).toBe('inline');
+  });
+});
+
+describe('suggestChange — the block form', () => {
+  it('writes a replacement with the arrow on its own line', () => {
+    const change = suggestChange('P1\n\nP2', 'block');
+    expect(change?.text).toBe('{~~\nP1\n\nP2\n~>\n~~}');
+  });
+
+  it('puts the caret in the empty replacement, between two hidden markers', () => {
+    const change = suggestChange('alt', 'block');
+    const e = one(change!.text);
+    expect(e.spans.replacement).toEqual({ from: change!.caret, to: change!.caret });
+  });
+
+  it('leaves the inline form as it was', () => {
+    expect(suggestChange('alt')).toEqual({ text: '{~~alt~>~~}', caret: 8 });
+    expect(suggestChange('')).toEqual({ text: '{++++}', caret: 3 });
+  });
+});
+
+describe('parseCritic — blockForm', () => {
+  it('is true for a mark whose markers sit on their own lines', () => {
+    expect(one('{--\nP1\n\nP2\n--}').blockForm).toBe(true);
+  });
+
+  it('is false for a mark inside a sentence, even across a blank line', () => {
+    expect(one('Sie{-- ging.\n\nDann--} kam sie.').blockForm).toBe(false);
+  });
+
+  it('is false for a standalone comment', () => {
+    expect(one('{>>Notiz<<}').blockForm).toBe(false);
+  });
+
+  it('is false for a merge, whose newlines are its content', () => {
+    expect(one('…hinaus.{~~\n\n~> ~~}Der Regen…').blockForm).toBe(false);
+  });
+});
+
+describe('nestingDepth', () => {
+  it('is zero for marks that stand alone', () => {
+    const es = parseCritic('{--a--} und {++b++}');
+    expect(es.map((e) => nestingDepth(es, e))).toEqual([0, 0]);
+  });
+
+  it('counts the marks containing each one', () => {
+    const es = parseCritic('{--a {++b {==c==}++} d--}');
+    expect(es.map((e) => nestingDepth(es, e))).toEqual([0, 1, 2]);
   });
 });

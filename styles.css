@@ -479,6 +479,15 @@
    inline-block so no decoration on a surrounding construct paints through it,
    and the margin is breathing room against the next word — both gone on the
    first keystroke anyway. */
+/* A paragraph break inside a mark. Dimmer than the prose it sits in — it says
+   where a break is, and is not itself something to read. The strikethrough or
+   underline around it comes from the body's own mark, so this rule sets colour
+   and spacing and nothing else. */
+.ms-critic-pilcrow {
+  color: var(--text-faint);
+  padding: 0 0.1em;
+}
+
 .ms-critic-placeholder {
   display: inline-block;
   padding: 0 0.15em;
@@ -494,6 +503,15 @@
    a faint wash over the whole construct — braces, comment body and all — says
    where markup ends and the sentence resumes. Weaker than
    .ms-critic-highlight, so a real highlight stays the stronger object. */
+/* A marker with no partner. Painted because the failure is silent otherwise: an
+   unmatched marker does not parse, so the braces sit in the prose looking exactly
+   like text the writer typed on purpose. */
+.ms-critic-fault {
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+  border-radius: 3px;
+}
+
 .ms-critic-revealed {
   background-color: color-mix(in srgb, var(--text-accent) 7%, transparent);
   border-radius: 2px;
@@ -652,6 +670,10 @@
 /* An editorial comment is not one of the five constructs, and its bar says so
    by being the one that is not a colour: this row is prose about the passage
    rather than an edit waiting on a decision. */
+.ms-review-card[data-kind="problem"]::before {
+  background: var(--text-error);
+}
+
 .ms-review-card[data-kind="editorial"]::before {
   background: var(--text-muted);
 }
@@ -689,6 +711,22 @@
   line-height: 1.5;
   color: var(--text-normal);
   word-break: break-word;
+  /* A block-form cut carries paragraph breaks, and setText writes the body into
+     one element — without this, HTML collapses three paragraphs into one run-on
+     line. On a single-line quote it changes nothing. */
+  white-space: pre-wrap;
+  /* Six lines, not two: a card for a three-paragraph cut would otherwise fill
+     the sidebar. In CSS rather than by truncating in JS, so the full text stays
+     selectable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A mark inside another mark. */
+.ms-review-card.is-nested {
+  padding-left: calc(var(--size-4-3) + var(--ms-nesting, 1) * var(--size-4-4));
 }
 
 /* The surrounding line, shown when a comment has no anchor of its own. It is
@@ -716,6 +754,15 @@
    before the click: an I-beam alone is easy to miss in a sidebar. The negative
    margin keeps the tinted box aligned with the text above it rather than
    inset by its own padding. */
+/* What is wrong, in a sentence, on a card. Reads before the quote below it. */
+.ms-review-problem {
+  font-family: var(--font-text);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-error);
+  margin-bottom: var(--size-2-2);
+}
+
 .ms-review-comment {
   font-family: var(--font-text);
   font-size: 13px;

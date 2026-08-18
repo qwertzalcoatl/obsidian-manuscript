@@ -27,11 +27,28 @@ import {
   keymap,
   type DecorationSet,
 } from '@codemirror/view';
-import { parseCritic, type Entry, type Range } from './critic';
+import {
+  checkMarkup,
+  parseCritic,
+  type Entry,
+  type Fault,
+  type Kind,
+  type Range,
+} from './critic';
 
-/** Cheap reject for the overwhelming majority of notes, which carry no markup. */
+/**
+ * Cheap reject for the overwhelming majority of notes, which carry no markup.
+ *
+ * The closing brace has to count too, and not only for symmetry. Reading view
+ * hands this function one block at a time, so the second half of a mark spanning
+ * two paragraphs arrives as `Der Regen--} blieb.` — no opening brace anywhere in
+ * it. Testing for `{` alone skipped that block outright and left the reader
+ * looking at `--}`.
+ */
 function mightHaveMarkup(text: string): boolean {
-  return text.includes('{') || text.includes('%%') || text.includes('==');
+  return (
+    text.includes('{') || text.includes('}') || text.includes('%%') || text.includes('==')
+  );
 }
 
 const QUOTE_CLASS: Record<Entry['kind'], string> = {
@@ -148,6 +165,62 @@ class PlaceholderWidget extends WidgetType {
 const PLACEHOLDER = Decoration.widget({ widget: new PlaceholderWidget(), side: 1 });
 
 /**
+ * A paragraph break inside a mark, made visible.
+ *
+ * A struck-through blank line is invisible, so without this a merge —
+ * `{~~\n\n~> ~~}`, a substitution whose quoted half is the break itself — has
+ * nothing on screen to say it exists at all, and its card reads as an arrow with
+ * empty text on either side.
+ *
+ * A widget beside the newline rather than a replacement of it, for two reasons.
+ * An inline replacing decoration may not span a line break at all. And the break
+ * is still real until the mark is accepted, so the paragraphs should still read
+ * as two — the glyph says a break is being changed, not that it is already gone.
+ *
+ * A convention rather than a label, which is why it is a glyph and not the word
+ * "Absatzumbruch". Text editors have shown whitespace this way for forty years.
+ */
+class PilcrowWidget extends WidgetType {
+  readonly cls = 'ms-critic-pilcrow';
+  readonly text = '¶';
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.className = this.cls;
+    el.textContent = this.text;
+    return el;
+  }
+
+  eq(): boolean {
+    return true;
+  }
+}
+
+// side: -1 draws it before the position, so it lands at the end of the line the
+// newline closes rather than at the start of the next one.
+const PILCROW = Decoration.widget({ widget: new PilcrowWidget(), side: -1 });
+
+/**
+ * Where an entry wants a pilcrow: every newline in a body it is changing.
+ *
+ * The block form is excluded. There the newlines against the markers belong to
+ * the markers, and the ones between them separate paragraphs the reader can
+ * already see as paragraphs.
+ */
+function pilcrowRanges(state: EditorState, entry: Entry): number[] {
+  if (entry.blockForm) return [];
+  const out: number[] = [];
+  for (const body of [entry.spans.quote, entry.spans.replacement]) {
+    if (!nonEmpty(body)) continue;
+    const text = state.doc.sliceString(body.from, body.to);
+    for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) {
+      out.push(body.from + i);
+    }
+  }
+  return out;
+}
+
+/**
  * The empty body a placeholder should stand in, or null.
  *
  * Only the two an authoring command can produce: an insertion's text, and a
@@ -220,6 +293,23 @@ function isRevealed(unfold: Range | null, entry: Entry): boolean {
 }
 
 /**
+ * The narrowest mark covering `pos`, or null.
+ *
+ * Narrowest rather than first: with nesting, a position inside an inner mark is
+ * also inside the mark containing it, and a `.find()` over a list sorted by
+ * start offset answers with the outer one. Clicking a substitution that sits
+ * inside a cut means the substitution.
+ */
+export function entryAt(entries: readonly Entry[], pos: number): Entry | null {
+  let best: Entry | null = null;
+  for (const entry of entries) {
+    if (pos < entry.from || pos > entry.to) continue;
+    if (best === null || entry.to - entry.from < best.to - best.from) best = entry;
+  }
+  return best;
+}
+
+/**
  * Every decoration the editor paints for a document, derived from nothing but
  * the state passed in.
  *
@@ -288,6 +378,10 @@ export function criticDecorations(state: EditorState): DecorationSet {
     mark(entry.spans.quote, QUOTE_CLASS[entry.kind]);
     mark(entry.spans.replacement, 'ms-critic-insertion');
 
+    for (const at of pilcrowRanges(state, entry)) {
+      ranges.push({ from: at, to: at, value: PILCROW });
+    }
+
     if (revealed) continue;
 
     // A construct showing its raw source needs no help saying where to type:
@@ -323,6 +417,24 @@ export function criticDecorations(state: EditorState): DecorationSet {
     }
   }
 
+  // A marker that never found its partner is the silent failure the checker
+  // exists for: it does not parse, so the braces sit in the prose looking exactly
+  // like text the writer typed on purpose. Painting them is what stops them
+  // looking ordinary. A fault that belongs to a construct the parser *did* accept
+  // stays off the prose and goes on the card — the text renders, it merely
+  // renders as the wrong thing.
+  for (const fault of state.field(faultField)) {
+    if (fault.entryFrom !== null) continue;
+    ranges.push({
+      from: fault.at.from,
+      to: fault.at.to,
+      value: Decoration.mark({
+        class: 'ms-critic-fault',
+        attributes: { 'aria-label': 'Broken markup: this marker has no partner.' },
+      }),
+    });
+  }
+
   return Decoration.set(
     ranges.map((r) => r.value.range(r.from, r.to)),
     true
@@ -342,6 +454,22 @@ export const criticField = StateField.define<Entry[]>({
 function parse(state: EditorState): Entry[] {
   const text = state.doc.toString();
   return mightHaveMarkup(text) ? parseCritic(text) : [];
+}
+
+/**
+ * The note's faults, recomputed on every edit for the reason `criticField`
+ * re-parses the whole document: deciding whether a marker is stray needs the
+ * rest of the note, and a scene file is small enough that the honest answer is
+ * also the fast one.
+ */
+export const faultField = StateField.define<Fault[]>({
+  create: (state) => faults(state),
+  update: (value, tr) => (tr.docChanged ? faults(tr.state) : value),
+});
+
+function faults(state: EditorState): Fault[] {
+  const text = state.doc.toString();
+  return mightHaveMarkup(text) ? checkMarkup(text) : [];
 }
 
 /**
@@ -611,7 +739,11 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
   return [
     unfoldField,
     criticField,
-    EditorView.decorations.compute([criticField, unfoldField, 'selection'], criticDecorations),
+    faultField,
+    EditorView.decorations.compute(
+      [criticField, faultField, unfoldField, 'selection'],
+      criticDecorations
+    ),
     // Cursor motion skips these, so the markers are one step in either
     // direction instead of several invisible ones. skipAtomicRanges only
     // moves a position strictly inside a range, so the caret can still rest
@@ -643,7 +775,7 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
         if (event.button !== 0) return false;
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         if (pos === null) return false;
-        const hit = view.state.field(criticField).find((e) => pos >= e.from && pos <= e.to);
+        const hit = entryAt(view.state.field(criticField), pos);
         if (hit) onReveal(hit.from);
         return false;
       },
@@ -662,6 +794,90 @@ interface NodeSpan {
   node: Text;
   /** Offset of this node's text within the block's concatenated string. */
   start: number;
+}
+
+/**
+ * What Obsidian tells a post-processor about the block it just rendered.
+ *
+ * The note's whole source and this block's line range — `getSectionInfo`'s
+ * return, restated here so this file stays free of any `obsidian` import and
+ * stays testable without one.
+ */
+export interface SectionSource {
+  text: string;
+  lineStart: number;
+  lineEnd: number;
+}
+
+/** A mark that reaches into, over, or out of one block. */
+interface Straddle {
+  kind: Kind;
+  /** Where the opening marker starts in the block's rendered text, or null when it opened earlier. */
+  opensAt: number | null;
+  /** Where the closing marker starts, or null when it closes later. */
+  closesAt: number | null;
+}
+
+const OPENER: Record<Kind, string> = {
+  insertion: '{++',
+  deletion: '{--',
+  substitution: '{~~',
+  highlight: '{==',
+  comment: '{>>',
+};
+
+const CLOSER: Record<Kind, string> = {
+  insertion: '++}',
+  deletion: '--}',
+  substitution: '~~}',
+  highlight: '==}',
+  comment: '<<}',
+};
+
+/** Offset of the start of every line, so a line number becomes an offset. */
+function lineStarts(text: string): number[] {
+  const out = [0];
+  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) out.push(i + 1);
+  return out;
+}
+
+/**
+ * The marks reaching across this block's boundaries, and where their markers sit
+ * in its rendered text.
+ *
+ * The one question a block cannot answer for itself. Guessing is not available: a
+ * paragraph ending in an unmatched `{--` is either a mark continuing into the next
+ * paragraph or a typo, and guessing "continuing" would strike through a tail that
+ * Live Preview leaves as plain braces — the two display modes are not allowed to
+ * disagree about what a note says.
+ *
+ * Only the *kind* is taken from the source. The markers themselves are found in
+ * the block's own rendered text, because a marker survives rendering as literal
+ * text, so source offsets never have to be mapped onto the DOM. Mapping them would
+ * be the expensive part, and this does not do it.
+ */
+function straddles(
+  source: SectionSource,
+  entries: readonly Entry[],
+  blockText: string
+): Straddle[] {
+  const lineAt = lineStarts(source.text);
+  const blockFrom = lineAt[source.lineStart] ?? 0;
+  const blockTo =
+    source.lineEnd + 1 < lineAt.length ? lineAt[source.lineEnd + 1] - 1 : source.text.length;
+
+  const out: Straddle[] = [];
+  for (const entry of entries) {
+    const opensBefore = entry.from < blockFrom;
+    const closesAfter = entry.to > blockTo;
+    if (!opensBefore && !closesAfter) continue; // wholly inside — the block parse has it
+    if (entry.to <= blockFrom || entry.from >= blockTo) continue; // not this block at all
+
+    const opensAt = opensBefore ? null : blockText.indexOf(OPENER[entry.kind]);
+    const closesAt = closesAfter ? null : blockText.indexOf(CLOSER[entry.kind]);
+    out.push({ kind: entry.kind, opensAt, closesAt });
+  }
+  return out;
 }
 
 /** The nearest block-level ancestor, so a construct cannot span two paragraphs. */
@@ -729,40 +945,108 @@ type Op =
   | { from: number; to: number; op: 'wrap'; cls: string; label: string }
   | { from: number; to: number; op: 'text'; text: string; cls: string };
 
-function applyOps(spans: NodeSpan[], ops: Op[]): void {
-  for (const op of [...ops].sort((a, b) => b.from - a.from)) {
-    const parts = slices(spans, op.from, op.to);
-    // Right to left, so splitting a node never moves the ranges still to come.
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const slice = parts[i];
-      if (slice.end <= slice.start) continue;
-      const piece = isolate(slice.node, slice.start, slice.end);
+/**
+ * Applies every operation to one block, outermost wrap first.
+ *
+ * The order is the opposite of what it used to be, and nesting is the reason.
+ * With the operations run right to left, an enclosing wrap runs *after* the marks
+ * inside it, and by then the text node it was going to claim has been carved up
+ * by `isolate` — `splitText` truncates the node it is called on. The enclosing
+ * wrap then found only the surviving prefix and wrapped that: a cut containing a
+ * suggestion came out with its first few words struck through and the rest of the
+ * passage in plain type, which tells a reader nothing about where the cut ends.
+ *
+ * So wraps go widest first, and the node list is re-derived from the DOM before
+ * each operation, which is what lets an inner wrap find the nodes its enclosing
+ * wrap created. Offsets stay valid throughout because wrapping does not change
+ * the block's text — only `hide` and `text` do, and those run last, right to left,
+ * once every wrap is in place.
+ */
+function applyOps(block: HTMLElement, root: HTMLElement, ops: Op[]): void {
+  const wraps = ops.filter((op) => op.op === 'wrap');
+  const rest = ops.filter((op) => op.op !== 'wrap');
 
-      if (op.op === 'hide') {
-        piece.remove();
-        continue;
-      }
+  // Widest first: an enclosing wrap has to exist before the wrap inside it looks
+  // for the nodes to claim.
+  for (const op of [...wraps].sort((a, b) => b.to - b.from - (a.to - a.from))) {
+    applyOne(nodeSpansOf(block, root), op);
+  }
 
-      if (op.op === 'text') {
-        // A marker split across text nodes would otherwise get one element per
-        // node. Only the first slice becomes it; the rest simply go.
-        if (i > 0) {
-          piece.remove();
-          continue;
-        }
-        const el = document.createElement('span');
-        el.className = op.cls;
-        el.textContent = op.text;
-        piece.replaceWith(el);
-        continue;
-      }
+  // Removals and replacements last, right to left, so each one leaves the offsets
+  // to its left untouched.
+  for (const op of [...rest].sort((a, b) => b.from - a.from)) {
+    applyOne(nodeSpansOf(block, root), op);
+  }
+}
 
+/**
+ * The block's own text nodes with their offsets, as the DOM stands right now.
+ *
+ * Both arguments are load-bearing. `block` bounds the walk, and `blockOf` filters
+ * what the walk finds — without the filter, a section holding loose text beside a
+ * paragraph would have `block === root`, and the walk would fold the paragraph's
+ * nodes into the offsets belonging to the loose text. That is the rule
+ * `textNodesByBlock` groups by, applied a second time because the nodes have
+ * moved since it ran.
+ */
+function nodeSpansOf(block: HTMLElement, root: HTMLElement): NodeSpan[] {
+  const spans: NodeSpan[] = [];
+  let offset = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      // Code is not prose; markup inside it is a literal example.
+      if (parent.closest('code, pre')) return NodeFilter.FILTER_REJECT;
+      if (blockOf(node, root) !== block) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+    const text = n as Text;
+    spans.push({ node: text, start: offset });
+    offset += text.data.length;
+  }
+  return spans;
+}
+
+/** One operation, over the node slices it covers. */
+function applyOne(spans: NodeSpan[], op: Op): void {
+  const parts = slices(spans, op.from, op.to);
+
+  // Right to left, so splitting a node never moves the slices still to come.
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const slice = parts[i];
+    if (slice.end <= slice.start) continue;
+    const piece = isolate(slice.node, slice.start, slice.end);
+
+    if (op.op === 'hide') {
+      piece.remove();
+      continue;
+    }
+
+    if (op.op === 'wrap') {
+      // A wrapper per slice rather than one across all of them: the slices can
+      // sit under different parents — `{++**fett** und kursiv++}` arrives that
+      // way — and one element cannot span two parents.
       const wrapper = document.createElement('span');
       wrapper.className = op.cls;
       wrapper.setAttribute('aria-label', op.label);
       piece.replaceWith(wrapper);
       wrapper.appendChild(piece);
+      continue;
     }
+
+    // A marker split across text nodes would otherwise get one element per node.
+    // Only the first slice becomes it; the rest simply go.
+    if (i > 0) {
+      piece.remove();
+      continue;
+    }
+    const el = document.createElement('span');
+    el.className = op.cls;
+    el.textContent = op.text;
+    piece.replaceWith(el);
   }
 }
 
@@ -776,8 +1060,20 @@ function applyOps(spans: NodeSpan[], ops: Op[]): void {
  * Comments render as nothing at all, anchored or not: they live in the Review
  * drawer, and an editorial note has no business interrupting a reader.
  */
-export function renderCriticMarkup(root: HTMLElement): void {
-  for (const [, nodes] of textNodesByBlock(root)) {
+export function renderCriticMarkup(root: HTMLElement, source?: SectionSource): void {
+  const groups = textNodesByBlock(root);
+  // Straddle handling needs a line range that describes exactly one block. A
+  // section holding several — a callout, a list — gets one range for all of them,
+  // so it falls back to the per-block parse. Marks inside a callout are
+  // single-paragraph in practice.
+  const single = source !== undefined && groups.size === 1;
+  // Parsed once rather than per block: it is the same note every time.
+  const sourceEntries =
+    single && source !== undefined && mightHaveMarkup(source.text)
+      ? parseCritic(source.text)
+      : [];
+
+  for (const [block, nodes] of groups) {
     const spans: NodeSpan[] = [];
     let text = '';
     for (const node of nodes) {
@@ -785,7 +1081,11 @@ export function renderCriticMarkup(root: HTMLElement): void {
       text += node.data;
     }
 
-    if (!mightHaveMarkup(text)) continue;
+    // A block lying wholly inside a mark carries no marker of its own, so the
+    // cheap reject cannot decide on its own whether there is work here.
+    const crossing =
+      single && source !== undefined ? straddles(source, sourceEntries, text) : [];
+    if (!mightHaveMarkup(text) && crossing.length === 0) continue;
 
     const ops: Op[] = [];
     for (const entry of parseCritic(text)) {
@@ -822,6 +1122,49 @@ export function renderCriticMarkup(root: HTMLElement): void {
       }
     }
 
-    if (ops.length > 0) applyOps(spans, ops);
+    {
+      for (const straddle of crossing) {
+        const bodyFrom = straddle.opensAt === null ? 0 : straddle.opensAt + 3;
+        const bodyTo = straddle.closesAt === null ? text.length : straddle.closesAt;
+        if (straddle.opensAt !== null) {
+          ops.push({ from: straddle.opensAt, to: straddle.opensAt + 3, op: 'hide' });
+        }
+        if (straddle.closesAt !== null) {
+          ops.push({ from: straddle.closesAt, to: straddle.closesAt + 3, op: 'hide' });
+        }
+        if (bodyTo <= bodyFrom) continue;
+        // A comment renders as nothing at all, anchored or not — an editorial note
+        // has no business interrupting a reader.
+        if (straddle.kind === 'comment') {
+          ops.push({ from: bodyFrom, to: bodyTo, op: 'hide' });
+        } else if (QUOTE_CLASS[straddle.kind]) {
+          ops.push({
+            from: bodyFrom,
+            to: bodyTo,
+            op: 'wrap',
+            cls: QUOTE_CLASS[straddle.kind],
+            label: `Suggested change: ${text.slice(bodyFrom, bodyTo)}`,
+          });
+        }
+      }
+    }
+
+    // Whatever is still unpaired after all of that belongs to a mark whose partner
+    // is in another block and whose source was not available. Obsidian returns
+    // nothing from getSectionInfo for an embedded note or a PDF export, and a brace
+    // shown to a reader is worse than a passage left unstyled.
+    for (const fault of checkMarkup(text)) {
+      if (fault.entryFrom !== null) continue;
+      if (ops.some((op) => op.from <= fault.at.from && op.to >= fault.at.to)) continue;
+      ops.push({ ...fault.at, op: 'hide' });
+    }
+
+    if (ops.length > 0) applyOps(block, root, ops);
+
+    // A block-form marker sits alone on its line, so Obsidian renders it as a
+    // paragraph of its own — and hiding the marker leaves that paragraph empty,
+    // which the reader sees as a blank line where the syntax used to be. An element
+    // whose text is entirely gone held nothing but markup.
+    if (block !== root && block.textContent === '') block.remove();
   }
 }

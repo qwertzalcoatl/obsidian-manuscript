@@ -28,11 +28,18 @@ import {
   originLink,
   timestamp,
 } from "./archive";
-import { parseCritic, renderAccepted, renderRejected, suggestChange } from "./critic";
+import {
+  parseCritic,
+  renderAccepted,
+  renderRejected,
+  suggestChange,
+  wrapForm,
+} from "./critic";
 import { editorialInsertion } from "./editorial";
 import {
   criticEditorExtension,
   criticField,
+  entryAt,
   renderCriticMarkup,
   unfoldEffect,
   unfoldField,
@@ -67,6 +74,23 @@ const WRAPPERS: Record<MarkupKind, [string, string]> = {
   // A comment is an anchor plus an empty note. Nothing goes between the note's
   // own markers here — that text is typed on the card, and an empty note that
   // is never written gets removed again when the field closes.
+  comment: ["{==", "==}{>><<}"],
+};
+
+/**
+ * The same four constructs with their markers on their own lines.
+ *
+ * Chosen by `wrapForm` rather than by a setting: markers inside two sentences say
+ * "join these paragraphs", markers on their own lines say "these whole
+ * paragraphs". One key, and the shape of the selection decides which it means.
+ *
+ * A comment keeps its inline form. A note is one remark about a passage, and
+ * where its own markers sit changes nothing about it.
+ */
+const BLOCK_WRAPPERS: Record<MarkupKind, [string, string]> = {
+  highlight: ["{==\n", "\n==}"],
+  deletion: ["{--\n", "\n--}"],
+  insertion: ["{++\n", "\n++}"],
   comment: ["{==", "==}{>><<}"],
 };
 
@@ -1521,7 +1545,14 @@ export default class ManuscriptPlugin extends Plugin {
     this.registerEditorExtension(
       criticEditorExtension((offset) => this.focusReviewCard(offset))
     );
-    this.registerMarkdownPostProcessor((el) => renderCriticMarkup(el));
+    // getSectionInfo is the only way a post-processor can learn what the note says
+    // outside the block it was handed, which is exactly what a mark spanning two
+    // paragraphs needs. It returns null in several contexts — an embedded note, a
+    // PDF export — and the renderer is written for that: no braces reach the
+    // reader either way, only the styling goes.
+    this.registerMarkdownPostProcessor((el, ctx) =>
+      renderCriticMarkup(el, ctx.getSectionInfo(el) ?? undefined)
+    );
 
     this.addCommand({
       id: "open-review-panel",
@@ -1541,9 +1572,9 @@ export default class ManuscriptPlugin extends Plugin {
         if (!cm) return false;
 
         const pos = cm.state.selection.main.head;
-        const entry = cm.state
-          .field(criticField)
-          .find((e) => pos >= e.from && pos <= e.to);
+        // The innermost construct at the caret: repairing a substitution that
+        // sits inside a cut means the substitution.
+        const entry = entryAt(cm.state.field(criticField), pos);
         if (!entry) return false;
 
         if (!checking) {
@@ -1564,7 +1595,12 @@ export default class ManuscriptPlugin extends Plugin {
       { modifiers: ["Mod", "Shift"], key: "m" },
     ]);
     this.addSelectionCommand("highlight-selection", "Highlight selection", "highlight");
-    this.addSelectionCommand("suggest-deletion", "Suggest deletion", "deletion");
+    // Obsidian binds Cmd+- to Zoom out and Cmd+= to Zoom in, so the bare keys are
+    // not available. Minus for a cut, plus for an addition or a replacement,
+    // beside the ⌘⇧M this plugin already claims.
+    this.addSelectionCommand("suggest-deletion", "Suggest deletion", "deletion", [
+      { modifiers: ["Mod", "Shift"], key: "-" },
+    ]);
 
     // The only command that works without a selection, because that is the
     // difference between its two modes rather than a special case: with a
@@ -1575,17 +1611,20 @@ export default class ManuscriptPlugin extends Plugin {
     this.addCommand({
       id: "suggest-change",
       name: "Suggest a change",
+      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "+" }],
       editorCallback: (editor) => {
-        const change = suggestChange(editor.getSelection());
+        const from = editor.posToOffset(editor.getCursor("from"));
+        const to = editor.posToOffset(editor.getCursor("to"));
+        const change = suggestChange(
+          editor.getSelection(),
+          wrapForm(editor.getValue(), from, to)
+        );
         if (change === null) {
           new Notice(
             "This selection contains ~> or ~~}, which a replacement cannot hold. Shorten it and try again."
           );
           return;
         }
-
-        const from = editor.posToOffset(editor.getCursor("from"));
-        const to = editor.posToOffset(editor.getCursor("to"));
 
         // One transaction, not a replaceSelection followed by a setCursor.
         // Anything that lands between two dispatches — Obsidian's own selection
@@ -1699,7 +1738,9 @@ export default class ManuscriptPlugin extends Plugin {
     if (!selection) return;
 
     const start = editor.posToOffset(editor.getCursor("from"));
-    const [open, close] = WRAPPERS[kind];
+    const end = editor.posToOffset(editor.getCursor("to"));
+    const form = wrapForm(editor.getValue(), start, end);
+    const [open, close] = (form === "block" ? BLOCK_WRAPPERS : WRAPPERS)[kind];
     editor.replaceSelection(`${open}${selection}${close}`);
 
     if (kind === "comment" || kind === "deletion") await this.startNote(start);
