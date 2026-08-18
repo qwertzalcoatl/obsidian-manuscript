@@ -14,6 +14,7 @@ import { EditorState, RangeSet } from '@codemirror/state';
 import { Decoration } from '@codemirror/view';
 import {
   constructToSelectOnDelete,
+  faultField,
   criticDecorations,
   criticField,
   emptyBodyOf,
@@ -43,7 +44,7 @@ interface Painted {
 function paint(doc: string, cursor?: number): Painted[] {
   const state = EditorState.create({
     doc,
-    extensions: [unfoldField, criticField],
+    extensions: [unfoldField, criticField, faultField],
     ...(cursor === undefined ? {} : { selection: { anchor: cursor } }),
   });
 
@@ -95,7 +96,7 @@ function painted(state: EditorState, doc: string): Painted[] {
 function paintUnfolded(doc: string, at: number): Painted[] {
   const base = EditorState.create({
     doc,
-    extensions: [unfoldField, criticField],
+    extensions: [unfoldField, criticField, faultField],
     selection: { anchor: at },
   });
   const entry = base.field(criticField).find((e) => at >= e.from && at <= e.to);
@@ -300,8 +301,13 @@ describe('Live Preview decorations — what stays untouched', () => {
     expect(visible(doc)).toBe(doc);
   });
 
-  it('leaves an unterminated marker alone', () => {
-    expect(paint('Sie {++ ging fort.')).toEqual([]);
+  // It used to be left entirely alone, which was the silent failure: braces that
+  // do not parse look exactly like braces the writer meant. The prose around it
+  // is still untouched — only the marker itself is painted.
+  it('paints an unterminated marker and touches nothing else', () => {
+    const painted = paint('Sie {++ ging fort.');
+    expect(painted).toHaveLength(1);
+    expect(painted[0]).toMatchObject({ cls: 'ms-critic-fault', from: 4, to: 7 });
   });
 });
 
@@ -390,7 +396,7 @@ describe('Live Preview decorations — after an edit', () => {
   it('re-parses so offsets follow text inserted above', () => {
     const start = EditorState.create({
       doc: 'Sie {--ging--} fort.',
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
     });
     const after = start.update({ changes: { from: 0, insert: 'Neue Zeile\n' } }).state;
 
@@ -404,7 +410,7 @@ describe('Live Preview decorations — after an edit', () => {
   it('drops the decoration once the markup is deleted', () => {
     const start = EditorState.create({
       doc: '{--ging--}',
-      extensions: [criticField],
+      extensions: [criticField, faultField],
     });
     const after = start.update({ changes: { from: 0, to: 10, insert: 'ging' } }).state;
     expect(after.field(criticField)).toEqual([]);
@@ -415,7 +421,7 @@ describe('hiddenRanges — what the caret may not enter', () => {
   const rangesFor = (doc: string, cursor = 0) => {
     const state = EditorState.create({
       doc,
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
       selection: { anchor: cursor },
     });
     return hiddenRanges(state).map((r) => doc.slice(r.from, r.to));
@@ -440,7 +446,7 @@ describe('hiddenRanges — what the caret may not enter', () => {
   it('never covers the quote or the replacement', () => {
     const doc = 'Das {~~kalte~>fahle~~} Licht.';
     const covered = hiddenRanges(
-      EditorState.create({ doc, extensions: [unfoldField, criticField] })
+      EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] })
     );
     expect(covered.some((r) => r.from <= 7 && r.to > 7)).toBe(false); // 'k' of kalte
     expect(covered.some((r) => r.from <= 14 && r.to > 14)).toBe(false); // 'f' of fahle
@@ -450,7 +456,7 @@ describe('hiddenRanges — what the caret may not enter', () => {
     const doc = 'Sie {++leise ++}ging.';
     const state = EditorState.create({
       doc,
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
       selection: { anchor: 8 },
     }).update({ effects: unfoldEffect.of({ from: 4, to: 16 }) }).state;
     expect(hiddenRanges(state)).toEqual([]);
@@ -464,7 +470,7 @@ describe('hiddenRanges — what the caret may not enter', () => {
 describe('constructToSelectOnDelete — a keystroke that would break markup', () => {
   // {--ging--}: markers [4,7) and [11,14), body [7,11).
   const doc = 'Sie {--ging--} fort.';
-  const state = () => EditorState.create({ doc, extensions: [unfoldField, criticField] });
+  const state = () => EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] });
   const at = (pos: number, forward: boolean) =>
     constructToSelectOnDelete(state(), pos, forward);
 
@@ -509,7 +515,7 @@ describe('constructToSelectOnDelete — a keystroke that would break markup', ()
     const commented = 'Sie {--ging--}{>>zu spät?<<} fort.';
     const built = EditorState.create({
       doc: commented,
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
     });
     expect(constructToSelectOnDelete(built, 7, false)).toEqual({ from: 4, to: 28 });
   });
@@ -517,7 +523,7 @@ describe('constructToSelectOnDelete — a keystroke that would break markup', ()
 
 describe('lineCollapseRange — a comment that owned its line takes it along', () => {
   const collapse = (doc: string) => {
-    const state = EditorState.create({ doc, extensions: [unfoldField, criticField] });
+    const state = EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] });
     const entry = state.field(criticField)[0];
     const range = lineCollapseRange(state, entry);
     return range === null ? null : doc.slice(range.from, range.to);
@@ -615,7 +621,7 @@ describe('constructToSelectOnDelete — the line a collapsed comment took with i
   // "Sie ging.\n" is [0,10); the comment is [10,25); the collapse swallowed
   // the newline at 9, so what the reader sees as one object is [9,25).
   const doc = 'Sie ging.\n{>>Mehr Luft<<}\nDann Stille.';
-  const state = () => EditorState.create({ doc, extensions: [unfoldField, criticField] });
+  const state = () => EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] });
 
   it('selects the collapsed line when delete would eat its newline', () => {
     expect(constructToSelectOnDelete(state(), 9, true)).toEqual({ from: 9, to: 25 });
@@ -637,7 +643,7 @@ describe('suggestChange — the caret lands somewhere it can rest', () => {
   const reachable = (doc: string, caret: number) => {
     const state = EditorState.create({
       doc,
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
       selection: { anchor: caret },
     });
     return !hiddenRanges(state).some((r) => caret > r.from && caret < r.to);
@@ -654,7 +660,7 @@ describe('suggestChange — the caret lands somewhere it can rest', () => {
 
   it('sits between the two markers it was written between', () => {
     const doc = 'Sie {++++} fort.';
-    const state = EditorState.create({ doc, extensions: [unfoldField, criticField] });
+    const state = EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] });
     expect(hiddenRanges(state)).toEqual([
       { from: 4, to: 7 },
       { from: 7, to: 10 },
@@ -685,7 +691,7 @@ describe('Live Preview decorations — the substitution arrow', () => {
 
 describe('emptyBodyOf — where the words are going to go', () => {
   const bodyOf = (doc: string) => {
-    const state = EditorState.create({ doc, extensions: [unfoldField, criticField] });
+    const state = EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] });
     return emptyBodyOf(state.field(criticField)[0]);
   };
 
@@ -746,7 +752,7 @@ describe('Live Preview decorations — the placeholder', () => {
 describe('emptyConstructAt — what Escape throws away', () => {
   const at = (doc: string, pos: number) =>
     emptyConstructAt(
-      EditorState.create({ doc, extensions: [unfoldField, criticField] }),
+      EditorState.create({ doc, extensions: [unfoldField, criticField, faultField] }),
       pos
     );
 
@@ -776,7 +782,7 @@ describe('emptyConstructAt — what Escape throws away', () => {
   it('leaves a construct showing its raw source alone', () => {
     const revealed = EditorState.create({
       doc: 'Sie {++++}ging.',
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
       selection: { anchor: 7 },
     }).update({ effects: unfoldEffect.of({ from: 4, to: 10 }) }).state;
     expect(emptyConstructAt(revealed, 7)).toBeNull();
@@ -818,7 +824,7 @@ describe('criticDecorations — what nesting could break', () => {
   it('produces hidden ranges out of document order without complaint', () => {
     const state = EditorState.create({
       doc: '{--a {++b++} c--}',
-      extensions: [unfoldField, criticField],
+      extensions: [unfoldField, criticField, faultField],
     });
     const ranges = hiddenRanges(state);
     expect(ranges.length).toBeGreaterThan(2);
@@ -851,5 +857,25 @@ describe('criticDecorations — the paragraph break inside a mark', () => {
 
   it('draws none in a mark that stays on one line', () => {
     expect(pilcrows('Sie {--ging--} fort.')).toHaveLength(0);
+  });
+});
+
+describe('criticDecorations — a stray marker is painted', () => {
+  const faults = (doc: string) => paint(doc).filter((p) => p.cls === 'ms-critic-fault');
+
+  it('marks an opening marker with no closer', () => {
+    const painted = faults('Sie {-- ging fort.');
+    expect(painted).toHaveLength(1);
+    expect(painted[0]).toMatchObject({ from: 4, to: 7 });
+  });
+
+  it('leaves a note whose marks are closed alone', () => {
+    expect(faults('Sie {--ging--} fort.')).toEqual([]);
+  });
+
+  // A fault belonging to a construct the parser accepted is the card's business,
+  // not the prose's: the text renders, it just renders as the wrong thing.
+  it('does not paint a substitution that merely lacks its arrow', () => {
+    expect(faults('{~~Dann~~}')).toEqual([]);
   });
 });

@@ -27,7 +27,7 @@ import {
   keymap,
   type DecorationSet,
 } from '@codemirror/view';
-import { parseCritic, type Entry, type Range } from './critic';
+import { checkMarkup, parseCritic, type Entry, type Fault, type Range } from './critic';
 
 /** Cheap reject for the overwhelming majority of notes, which carry no markup. */
 function mightHaveMarkup(text: string): boolean {
@@ -400,6 +400,24 @@ export function criticDecorations(state: EditorState): DecorationSet {
     }
   }
 
+  // A marker that never found its partner is the silent failure the checker
+  // exists for: it does not parse, so the braces sit in the prose looking exactly
+  // like text the writer typed on purpose. Painting them is what stops them
+  // looking ordinary. A fault that belongs to a construct the parser *did* accept
+  // stays off the prose and goes on the card — the text renders, it merely
+  // renders as the wrong thing.
+  for (const fault of state.field(faultField)) {
+    if (fault.entryFrom !== null) continue;
+    ranges.push({
+      from: fault.at.from,
+      to: fault.at.to,
+      value: Decoration.mark({
+        class: 'ms-critic-fault',
+        attributes: { 'aria-label': 'Broken markup: this marker has no partner.' },
+      }),
+    });
+  }
+
   return Decoration.set(
     ranges.map((r) => r.value.range(r.from, r.to)),
     true
@@ -419,6 +437,22 @@ export const criticField = StateField.define<Entry[]>({
 function parse(state: EditorState): Entry[] {
   const text = state.doc.toString();
   return mightHaveMarkup(text) ? parseCritic(text) : [];
+}
+
+/**
+ * The note's faults, recomputed on every edit for the reason `criticField`
+ * re-parses the whole document: deciding whether a marker is stray needs the
+ * rest of the note, and a scene file is small enough that the honest answer is
+ * also the fast one.
+ */
+export const faultField = StateField.define<Fault[]>({
+  create: (state) => faults(state),
+  update: (value, tr) => (tr.docChanged ? faults(tr.state) : value),
+});
+
+function faults(state: EditorState): Fault[] {
+  const text = state.doc.toString();
+  return mightHaveMarkup(text) ? checkMarkup(text) : [];
 }
 
 /**
@@ -688,7 +722,11 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
   return [
     unfoldField,
     criticField,
-    EditorView.decorations.compute([criticField, unfoldField, 'selection'], criticDecorations),
+    faultField,
+    EditorView.decorations.compute(
+      [criticField, faultField, unfoldField, 'selection'],
+      criticDecorations
+    ),
     // Cursor motion skips these, so the markers are one step in either
     // direction instead of several invisible ones. skipAtomicRanges only
     // moves a position strictly inside a range, so the caret can still rest

@@ -503,6 +503,15 @@
    a faint wash over the whole construct — braces, comment body and all — says
    where markup ends and the sentence resumes. Weaker than
    .ms-critic-highlight, so a real highlight stays the stronger object. */
+/* A marker with no partner. Painted because the failure is silent otherwise: an
+   unmatched marker does not parse, so the braces sit in the prose looking exactly
+   like text the writer typed on purpose. */
+.ms-critic-fault {
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+  border-radius: 3px;
+}
+
 .ms-critic-revealed {
   background-color: color-mix(in srgb, var(--text-accent) 7%, transparent);
   border-radius: 2px;
@@ -661,6 +670,10 @@
 /* An editorial comment is not one of the five constructs, and its bar says so
    by being the one that is not a colour: this row is prose about the passage
    rather than an edit waiting on a decision. */
+.ms-review-card[data-kind="problem"]::before {
+  background: var(--text-error);
+}
+
 .ms-review-card[data-kind="editorial"]::before {
   background: var(--text-muted);
 }
@@ -741,6 +754,15 @@
    before the click: an I-beam alone is easy to miss in a sidebar. The negative
    margin keeps the tinted box aligned with the text above it rather than
    inset by its own padding. */
+/* What is wrong, in a sentence, on a card. Reads before the quote below it. */
+.ms-review-problem {
+  font-family: var(--font-text);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-error);
+  margin-bottom: var(--size-2-2);
+}
+
 .ms-review-comment {
   font-family: var(--font-text);
   font-size: 13px;
