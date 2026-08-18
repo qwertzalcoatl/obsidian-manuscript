@@ -67,9 +67,29 @@ The commands you will reach for:
 |---|---|
 | Comment on selection — `⌘⇧M` | yes |
 | Highlight selection | yes |
-| Suggest deletion | yes |
-| Suggest a change | no — with a selection it replaces, without one it inserts |
+| Suggest deletion — `⌘⇧-` | yes |
+| Suggest a change — `⌘⇧+` | no — with a selection it replaces, without one it inserts |
 | Insert editorial comment | no |
+
+A mark may cover several paragraphs, and where you put its markers says what it
+means. Inside two sentences it proposes joining them into one paragraph; on lines
+of their own it takes the paragraphs whole:
+
+```markdown
+{--
+Der Regen hatte aufgehört.
+
+Irgendwo schlug eine Tür.
+--}
+```
+
+Selecting whole paragraphs writes that form for you, selecting from mid-sentence
+to mid-sentence the inline one. A paragraph break inside a mark shows as `¶`,
+because a struck-through blank line would otherwise be invisible.
+
+Marks may also sit inside one another, which is what happens when you cut a
+passage that already carries a suggestion. The drawer indents the inner card
+under the outer one, and accepting the outer mark settles both.
 
 Marked-up prose stays editable in place: the syntax is hidden, you type around
 it, and nothing is settled just to reach the words nearby. **Show markup source
@@ -85,6 +105,10 @@ note to write or edit one (`⌘↵` commits, `Escape` cancels).
 - **Accept / Reject** decide a suggestion
 - **Resolve** clears a highlight or comment, leaving the text
 - **⋯ → Accept all / Reject all** settles the whole note at once
+- A **broken marker** — one with no partner, or a `{~~…~~}` with no `~>` — gets a
+  card with nothing to settle, saying what is wrong. In the prose the marker
+  itself is coloured, because braces that do not parse otherwise look exactly like
+  text you typed on purpose.
 
 Every action goes through the editor, so **⌘Z undoes it** like any other edit.
 
@@ -125,14 +149,20 @@ does. **The archive is append-only** — nothing here ever deletes from it, so
 
 ## Known limitations
 
-- Marks do not nest, and none may span a blank line — no multi-paragraph anchors.
+- The same kind of mark cannot nest inside itself: in `{--a {--b--} c--}` the
+  first closing marker has no way to say which opener it belongs to. The drawer
+  reports both loose ends.
 - CriticMarkup has no escape syntax, so a selection containing `~>` or `~~}`
   cannot become a substitution, and a note cannot contain a blank line or `<<}`.
+- A mistyped opening marker claims the closing marker of the next mark of its
+  kind, so it can strike through several paragraphs at once. `⌘Z` undoes it, and
+  the drawer names it.
 - **Accept all** / **Reject all** rewrite everything between the first and last
   mark in one edit, so the cursor can move. Deciding marks one at a time does not.
-- Whitespace left behind by a resolved mark is yours to tidy.
 - In Reading view only CriticMarkup renders — Obsidian strips `%%comments%%`
-  before any plugin sees them.
+  before any plugin sees them. A mark spanning paragraphs needs the note's source,
+  which Obsidian withholds inside an embedded note and in a PDF export; there the
+  markers still vanish, but the passage is left unstyled.
 
 ## Settings
 
