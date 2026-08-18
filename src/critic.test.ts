@@ -789,3 +789,50 @@ describe('suggestChange — what the command writes', () => {
     expect(suggestChange('a~b')).toEqual({ text: '{~~a~b~>~~}', caret: 8 });
   });
 });
+
+describe('parseCritic — the block form', () => {
+  const BLOCK = 'A.\n\n{--\nP1\n\nP2\n--}\n\nB.';
+
+  it('leaves the newlines beside the markers out of the quote', () => {
+    const e = one(BLOCK);
+    expect(e.kind).toBe('deletion');
+    expect(e.quote).toBe('P1\n\nP2');
+  });
+
+  it('gives each marker the newline against its inside edge', () => {
+    const e = one(BLOCK);
+    // '{--\n' and '\n--}', four characters each.
+    expect(e.spans.markers).toEqual([
+      { from: 4, to: 8 },
+      { from: 14, to: 18 },
+    ]);
+    expect(e.spans.quote).toEqual({ from: 8, to: 14 });
+  });
+
+  it('restores the passage with no blank line gained, on reject', () => {
+    expect(applyEntry(BLOCK, one(BLOCK), 'reject')).toBe('A.\n\nP1\n\nP2\n\nB.');
+  });
+
+  it('closes the gap on accept', () => {
+    expect(applyEntry(BLOCK, one(BLOCK), 'accept')).toBe('A.\n\nB.');
+  });
+
+  it('reads a block-form substitution', () => {
+    const e = one('{~~\nalt\n~>\nneu\n~~}');
+    expect(e.kind).toBe('substitution');
+    expect(e.quote).toBe('alt');
+    expect(e.replacement).toBe('neu');
+  });
+
+  it('counts a lone newline once', () => {
+    const e = one('{--\n--}');
+    expect(e.quote).toBe('');
+  });
+
+  // The same rule improves the single-line case, which used to leave the note
+  // with one blank line more than it started with.
+  it('closes the gap around a resolved own-line comment', () => {
+    const src = 'A.\n\n{>>note<<}\n\nB.';
+    expect(applyEntry(src, one(src), 'resolve')).toBe('A.\n\nB.');
+  });
+});

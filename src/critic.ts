@@ -84,6 +84,8 @@ interface Raw extends Range {
   quote: string;
   replacement?: string;
   native: boolean;
+  /** Written with its markers on their own lines. See isBlockForm. */
+  blockForm: boolean;
   /** Marker runs belonging to this construct alone. */
   markers: Range[];
   /** Where `quote` sits — for a comment, where its body sits. */
@@ -202,6 +204,30 @@ const NATIVE_HIGHLIGHT_RE = /==([^\n]+?)==/g;
 /**
  * A construct whose body is one run: everything between a fixed-length opening
  * and closing marker. Covers every form except a substitution.
+ *
+ * In the block form a newline against the inside edge of a marker belongs to
+ * the marker rather than to the body. That one rule is what lets
+ *
+ *     {--
+ *     Zwei Absätze.
+ *
+ *     Und noch einer.
+ *     --}
+ *
+ * need no special handling anywhere else: the marker lines vanish whole in both
+ * display modes, the card shows the prose without a blank line at either end,
+ * and rejecting writes the passage back without the two newlines that were never
+ * part of it. Without the rule, rejecting a block-form cut leaves the note one
+ * blank line heavier above and below the restored passage, every time.
+ *
+ * It applies to the block form only, and that is not a refinement — it is what
+ * keeps the rule from destroying the case it looks most like. A merge is a
+ * substitution whose quoted half is a paragraph break and nothing else,
+ * `{~~\n\n~> ~~}`, and there the newlines are the entire content. Absorbing
+ * them leaves a mark that quotes nothing and substitutes nothing.
+ *
+ * `body.length > lead` guards the degenerate `{--\n--}`, where one newline
+ * would otherwise be claimed by both markers.
  */
 function simple(
   kind: Kind,
@@ -209,21 +235,48 @@ function simple(
   to: number,
   body: string,
   markerLen: number,
-  native: boolean
+  native: boolean,
+  blockForm = false
 ): Raw {
-  const bodyFrom = from + markerLen;
+  const lead = blockForm && body.startsWith('\n') ? 1 : 0;
+  const trail = blockForm && body.length > lead && body.endsWith('\n') ? 1 : 0;
+  const bodyFrom = from + markerLen + lead;
+  const bodyTo = to - markerLen - trail;
   return {
     kind,
     from,
     to,
-    quote: body,
+    quote: body.slice(lead, body.length - trail),
     native,
+    blockForm,
     markers: [
       { from, to: bodyFrom },
-      { from: to - markerLen, to },
+      { from: bodyTo, to },
     ],
-    quoteAt: { from: bodyFrom, to: to - markerLen },
+    quoteAt: { from: bodyFrom, to: bodyTo },
   };
+}
+
+/**
+ * Whether a match was written with its markers on their own lines.
+ *
+ * Three conditions, and the first is the one that carries the weight: nothing
+ * but whitespace before the opening marker on its line. That is what tells a
+ * block-form cut from a merge — `…hinaus.{~~\n\n~> ~~}Der Regen…` has a
+ * sentence in front of its opener, so its newlines stay content.
+ *
+ * Deliberately silent about what follows the closing marker, because a note
+ * attaches there: `setComment` writes `{>>…<<}` flush against `to`, so
+ * requiring a clear line after the closer would make a block-form cut stop
+ * being one the moment the writer explained it.
+ */
+function isBlockForm(content: string, from: number, to: number, markerLen: number): boolean {
+  const lineStart = content.lastIndexOf('\n', from - 1) + 1;
+  return (
+    content.slice(lineStart, from).trim() === '' &&
+    content[from + markerLen] === '\n' &&
+    content[to - markerLen - 1] === '\n'
+  );
 }
 
 /**
@@ -276,40 +329,56 @@ function scanCritic(content: string, skip: Range[]): Raw[] {
 
     if (overlaps(skip, from, to)) continue;
 
+    const blockForm = isBlockForm(content, from, to, 3);
+
     if (m[1] !== undefined) {
-      out.push(simple('insertion', from, to, m[1], 3, false));
+      out.push(simple('insertion', from, to, m[1], 3, false, blockForm));
     } else if (m[2] !== undefined) {
-      out.push(simple('deletion', from, to, m[2], 3, false));
+      out.push(simple('deletion', from, to, m[2], 3, false, blockForm));
     } else if (m[3] !== undefined) {
       // Splits on the first ~>; a body without one is a malformed substitution
       // and is treated as a deletion of exactly what it holds.
       const arrow = m[3].indexOf('~>');
       if (arrow === -1) {
-        out.push(simple('deletion', from, to, m[3], 3, false));
+        out.push(simple('deletion', from, to, m[3], 3, false, blockForm));
       } else {
-        const oldFrom = from + 3;
-        const arrowFrom = oldFrom + arrow;
-        const newFrom = arrowFrom + 2;
+        const body = m[3];
+        const lead = blockForm && body.startsWith('\n') ? 1 : 0;
+        const trail = blockForm && body.length > lead && body.endsWith('\n') ? 1 : 0;
+        const oldHalf = body.slice(lead, arrow);
+        const newHalf = body.slice(arrow + 2, body.length - trail);
+        // The arrow is a marker with an inside edge on both sides, so it takes a
+        // newline from each — which is what makes `{~~\nalt\n~>\nneu\n~~}`
+        // report `alt` and `neu` rather than `alt\n` and `\nneu`.
+        const oldTrail = blockForm && oldHalf.endsWith('\n') ? 1 : 0;
+        const newLead = blockForm && newHalf.startsWith('\n') ? 1 : 0;
+
+        const bodyFrom = from + 3 + lead;
+        const arrowFrom = from + 3 + arrow - oldTrail;
+        const arrowTo = from + 3 + arrow + 2 + newLead;
+        const bodyTo = to - 3 - trail;
+
         out.push({
           kind: 'substitution',
           from,
           to,
-          quote: m[3].slice(0, arrow),
-          replacement: m[3].slice(arrow + 2),
+          quote: oldHalf.slice(0, oldHalf.length - oldTrail),
+          replacement: newHalf.slice(newLead),
           native: false,
+          blockForm,
           markers: [
-            { from, to: oldFrom },
-            { from: arrowFrom, to: newFrom },
-            { from: to - 3, to },
+            { from, to: bodyFrom },
+            { from: arrowFrom, to: arrowTo },
+            { from: bodyTo, to },
           ],
-          quoteAt: { from: oldFrom, to: arrowFrom },
-          replacementAt: { from: newFrom, to: to - 3 },
+          quoteAt: { from: bodyFrom, to: arrowFrom },
+          replacementAt: { from: arrowTo, to: bodyTo },
         });
       }
     } else if (m[4] !== undefined) {
-      out.push(simple('highlight', from, to, m[4], 3, false));
+      out.push(simple('highlight', from, to, m[4], 3, false, blockForm));
     } else {
-      out.push(simple('comment', from, to, m[5], 3, false));
+      out.push(simple('comment', from, to, m[5], 3, false, blockForm));
     }
   }
 
@@ -500,6 +569,14 @@ function applyEdits(content: string, edits: Edit[]): string {
         // the surrounding paragraphs close up instead of gaining a gap.
         to = atEof ? lineEnd : lineEnd + 1;
         if (atEof && lineStart > 0) from = lineStart - 1;
+
+        // A mark that sat between two blank lines leaves two behind: the one
+        // above it and the one below. Take one of them, so the paragraphs it
+        // stood between end up separated the way every other pair in the note
+        // is. Both sides have to be blank — with text on either side the single
+        // newline above is the separator, and removing it would join two
+        // paragraphs that were never meant to join.
+        if (from > 0 && out[from - 1] === '\n' && out[to] === '\n') to++;
       }
     }
 
