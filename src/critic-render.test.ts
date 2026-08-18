@@ -206,3 +206,33 @@ describe('renderCriticMarkup — a mark that spans two blocks', () => {
     expect(root.textContent).toBe('So schreibt man {-- hin.');
   });
 });
+
+describe('renderCriticMarkup — a mark inside a mark', () => {
+  // The whole cut has to be struck through, not just the part before the mark
+  // inside it. Anything less and a reader cannot see where the cut ends.
+  it('strikes the whole cut, the mark inside it included', () => {
+    const root = render('<p>{--Sie zählte {~~Dann~>Schließlich~~} Ende.--}</p>');
+    expect(root.textContent).toBe('Sie zählte Dann→Schließlich Ende.');
+
+    const outer = root.querySelector('.ms-critic-deletion');
+    expect(outer?.textContent).toBe('Sie zählte Dann→Schließlich Ende.');
+    expect(root.querySelectorAll('.ms-critic-insertion')).toHaveLength(1);
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('Schließlich');
+    // And the replacement sits inside the cut, so it wears both treatments:
+    // proposed wording that the cut would take away with it.
+    expect(outer?.querySelector('.ms-critic-insertion')).not.toBeNull();
+  });
+
+  it('keeps every character of a nested highlight, and underlines all of it', () => {
+    const root = render('<p>{++neu {==wichtig==} da++}</p>');
+    expect(root.textContent).toBe('neu wichtig da');
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('neu wichtig da');
+    expect(root.querySelector('.ms-critic-highlight')?.textContent).toBe('wichtig');
+  });
+
+  it('nests a mark that itself wraps inline markdown', () => {
+    const root = render('<p>{--weg <strong>fett</strong> {++neu++} da--}</p>');
+    expect(root.textContent).toBe('weg fett neu da');
+    expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('neu');
+  });
+});

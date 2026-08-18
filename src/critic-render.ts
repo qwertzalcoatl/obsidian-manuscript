@@ -854,40 +854,108 @@ type Op =
   | { from: number; to: number; op: 'wrap'; cls: string; label: string }
   | { from: number; to: number; op: 'text'; text: string; cls: string };
 
-function applyOps(spans: NodeSpan[], ops: Op[]): void {
-  for (const op of [...ops].sort((a, b) => b.from - a.from)) {
-    const parts = slices(spans, op.from, op.to);
-    // Right to left, so splitting a node never moves the ranges still to come.
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const slice = parts[i];
-      if (slice.end <= slice.start) continue;
-      const piece = isolate(slice.node, slice.start, slice.end);
+/**
+ * Applies every operation to one block, outermost wrap first.
+ *
+ * The order is the opposite of what it used to be, and nesting is the reason.
+ * With the operations run right to left, an enclosing wrap runs *after* the marks
+ * inside it, and by then the text node it was going to claim has been carved up
+ * by `isolate` — `splitText` truncates the node it is called on. The enclosing
+ * wrap then found only the surviving prefix and wrapped that: a cut containing a
+ * suggestion came out with its first few words struck through and the rest of the
+ * passage in plain type, which tells a reader nothing about where the cut ends.
+ *
+ * So wraps go widest first, and the node list is re-derived from the DOM before
+ * each operation, which is what lets an inner wrap find the nodes its enclosing
+ * wrap created. Offsets stay valid throughout because wrapping does not change
+ * the block's text — only `hide` and `text` do, and those run last, right to left,
+ * once every wrap is in place.
+ */
+function applyOps(block: HTMLElement, root: HTMLElement, ops: Op[]): void {
+  const wraps = ops.filter((op) => op.op === 'wrap');
+  const rest = ops.filter((op) => op.op !== 'wrap');
 
-      if (op.op === 'hide') {
-        piece.remove();
-        continue;
-      }
+  // Widest first: an enclosing wrap has to exist before the wrap inside it looks
+  // for the nodes to claim.
+  for (const op of [...wraps].sort((a, b) => b.to - b.from - (a.to - a.from))) {
+    applyOne(nodeSpansOf(block, root), op);
+  }
 
-      if (op.op === 'text') {
-        // A marker split across text nodes would otherwise get one element per
-        // node. Only the first slice becomes it; the rest simply go.
-        if (i > 0) {
-          piece.remove();
-          continue;
-        }
-        const el = document.createElement('span');
-        el.className = op.cls;
-        el.textContent = op.text;
-        piece.replaceWith(el);
-        continue;
-      }
+  // Removals and replacements last, right to left, so each one leaves the offsets
+  // to its left untouched.
+  for (const op of [...rest].sort((a, b) => b.from - a.from)) {
+    applyOne(nodeSpansOf(block, root), op);
+  }
+}
 
+/**
+ * The block's own text nodes with their offsets, as the DOM stands right now.
+ *
+ * Both arguments are load-bearing. `block` bounds the walk, and `blockOf` filters
+ * what the walk finds — without the filter, a section holding loose text beside a
+ * paragraph would have `block === root`, and the walk would fold the paragraph's
+ * nodes into the offsets belonging to the loose text. That is the rule
+ * `textNodesByBlock` groups by, applied a second time because the nodes have
+ * moved since it ran.
+ */
+function nodeSpansOf(block: HTMLElement, root: HTMLElement): NodeSpan[] {
+  const spans: NodeSpan[] = [];
+  let offset = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      // Code is not prose; markup inside it is a literal example.
+      if (parent.closest('code, pre')) return NodeFilter.FILTER_REJECT;
+      if (blockOf(node, root) !== block) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+    const text = n as Text;
+    spans.push({ node: text, start: offset });
+    offset += text.data.length;
+  }
+  return spans;
+}
+
+/** One operation, over the node slices it covers. */
+function applyOne(spans: NodeSpan[], op: Op): void {
+  const parts = slices(spans, op.from, op.to);
+
+  // Right to left, so splitting a node never moves the slices still to come.
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const slice = parts[i];
+    if (slice.end <= slice.start) continue;
+    const piece = isolate(slice.node, slice.start, slice.end);
+
+    if (op.op === 'hide') {
+      piece.remove();
+      continue;
+    }
+
+    if (op.op === 'wrap') {
+      // A wrapper per slice rather than one across all of them: the slices can
+      // sit under different parents — `{++**fett** und kursiv++}` arrives that
+      // way — and one element cannot span two parents.
       const wrapper = document.createElement('span');
       wrapper.className = op.cls;
       wrapper.setAttribute('aria-label', op.label);
       piece.replaceWith(wrapper);
       wrapper.appendChild(piece);
+      continue;
     }
+
+    // A marker split across text nodes would otherwise get one element per node.
+    // Only the first slice becomes it; the rest simply go.
+    if (i > 0) {
+      piece.remove();
+      continue;
+    }
+    const el = document.createElement('span');
+    el.className = op.cls;
+    el.textContent = op.text;
+    piece.replaceWith(el);
   }
 }
 
@@ -902,7 +970,7 @@ function applyOps(spans: NodeSpan[], ops: Op[]): void {
  * drawer, and an editorial note has no business interrupting a reader.
  */
 export function renderCriticMarkup(root: HTMLElement): void {
-  for (const [, nodes] of textNodesByBlock(root)) {
+  for (const [block, nodes] of textNodesByBlock(root)) {
     const spans: NodeSpan[] = [];
     let text = '';
     for (const node of nodes) {
@@ -957,6 +1025,6 @@ export function renderCriticMarkup(root: HTMLElement): void {
       ops.push({ ...fault.at, op: 'hide' });
     }
 
-    if (ops.length > 0) applyOps(spans, ops);
+    if (ops.length > 0) applyOps(block, root, ops);
   }
 }
