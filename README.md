@@ -159,6 +159,10 @@ does. **The archive is append-only** — nothing here ever deletes from it, so
   the drawer names it.
 - **Accept all** / **Reject all** rewrite everything between the first and last
   mark in one edit, so the cursor can move. Deciding marks one at a time does not.
+- The two punctuation shortcuts are bound for a German and a US layout. On a
+  layout that reaches `-` or `+` some third way, record your own in
+  **Settings > Hotkeys** — Obsidian only tells a plugin which character a key
+  produces, so no default can cover every board.
 - In Reading view only CriticMarkup renders — Obsidian strips `%%comments%%`
   before any plugin sees them. A mark spanning paragraphs needs the note's source,
   which Obsidian withholds inside an embedded note and in a PDF export; there the

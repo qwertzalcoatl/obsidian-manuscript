@@ -36,6 +36,7 @@ import {
   wrapForm,
 } from "./critic";
 import { editorialInsertion } from "./editorial";
+import { SUGGEST_CHANGE_HOTKEYS, SUGGEST_DELETION_HOTKEYS } from "./hotkeys";
 import {
   criticEditorExtension,
   criticField,
@@ -1595,12 +1596,15 @@ export default class ManuscriptPlugin extends Plugin {
       { modifiers: ["Mod", "Shift"], key: "m" },
     ]);
     this.addSelectionCommand("highlight-selection", "Highlight selection", "highlight");
-    // Obsidian binds Cmd+- to Zoom out and Cmd+= to Zoom in, so the bare keys are
-    // not available. Minus for a cut, plus for an addition or a replacement,
-    // beside the ⌘⇧M this plugin already claims.
-    this.addSelectionCommand("suggest-deletion", "Suggest deletion", "deletion", [
-      { modifiers: ["Mod", "Shift"], key: "-" },
-    ]);
+    // Minus for a cut, plus for an addition or a replacement. Each binding is a
+    // list because a punctuation key means different characters on different
+    // layouts — see hotkeys.ts, which explains it and is tested.
+    this.addSelectionCommand(
+      "suggest-deletion",
+      "Suggest deletion",
+      "deletion",
+      SUGGEST_DELETION_HOTKEYS
+    );
 
     // The only command that works without a selection, because that is the
     // difference between its two modes rather than a special case: with a
@@ -1611,7 +1615,7 @@ export default class ManuscriptPlugin extends Plugin {
     this.addCommand({
       id: "suggest-change",
       name: "Suggest a change",
-      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "+" }],
+      hotkeys: SUGGEST_CHANGE_HOTKEYS,
       editorCallback: (editor) => {
         const from = editor.posToOffset(editor.getCursor("from"));
         const to = editor.posToOffset(editor.getCursor("to"));
