@@ -950,7 +950,7 @@ describe('checkMarkup', () => {
   // are true, and saying both is what tells the writer where the two ends are.
   it('reports both ends of same-kind nesting', () => {
     expect(kinds('{--a {--b--} c--}')).toEqual(['unmatched-opener', 'unmatched-closer']);
-    expect(checkMarkup('{--a {--b--} c--}').map((f) => f.at.from)).toEqual([5, 13]);
+    expect(checkMarkup('{--a {--b--} c--}').map((f) => f.at.from)).toEqual([5, 14]);
   });
 
   it('ignores markers in fenced code, inline code and frontmatter', () => {
