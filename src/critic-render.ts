@@ -29,9 +29,19 @@ import {
 } from '@codemirror/view';
 import { checkMarkup, parseCritic, type Entry, type Fault, type Range } from './critic';
 
-/** Cheap reject for the overwhelming majority of notes, which carry no markup. */
+/**
+ * Cheap reject for the overwhelming majority of notes, which carry no markup.
+ *
+ * The closing brace has to count too, and not only for symmetry. Reading view
+ * hands this function one block at a time, so the second half of a mark spanning
+ * two paragraphs arrives as `Der Regen--} blieb.` — no opening brace anywhere in
+ * it. Testing for `{` alone skipped that block outright and left the reader
+ * looking at `--}`.
+ */
 function mightHaveMarkup(text: string): boolean {
-  return text.includes('{') || text.includes('%%') || text.includes('==');
+  return (
+    text.includes('{') || text.includes('}') || text.includes('%%') || text.includes('==')
+  );
 }
 
 const QUOTE_CLASS: Record<Entry['kind'], string> = {
@@ -935,6 +945,16 @@ export function renderCriticMarkup(root: HTMLElement): void {
       if (nonEmpty(entry.spans.comment)) {
         ops.push({ ...entry.spans.comment, op: 'hide' });
       }
+    }
+
+    // A marker this block cannot pair belongs to a mark that opened in an earlier
+    // block or closes in a later one. Obsidian hands a post-processor one block at
+    // a time, so the partner is not here to be found — and a brace shown to a
+    // reader is worse than a passage left unstyled. checkMarkup skips code and
+    // frontmatter itself, which is what keeps a literal `{--` in a code span safe.
+    for (const fault of checkMarkup(text)) {
+      if (fault.entryFrom !== null) continue;
+      ops.push({ ...fault.at, op: 'hide' });
     }
 
     if (ops.length > 0) applyOps(spans, ops);

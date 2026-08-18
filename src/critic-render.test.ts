@@ -100,10 +100,13 @@ describe('renderCriticMarkup — several entries at once', () => {
     expect(root.textContent).toBe('Erste weg.Zweite neu.');
   });
 
-  it('does not join a construct across two paragraphs', () => {
-    // The opening marker never finds its close, so both stay literal.
+  // The parser is given one block at a time and cannot pair the two markers, so
+  // it styles neither — but it hides both, because a brace shown to a reader is
+  // worse than a passage left unstyled. Supplying the note's source is what lets
+  // the passage be styled as well; see the SectionSource cases below.
+  it('hides both markers of a mark it cannot pair across two paragraphs', () => {
     const root = render('<p>Erste {--offen</p><p>Zweite --} zu.</p>');
-    expect(root.textContent).toBe('Erste {--offenZweite --} zu.');
+    expect(root.textContent).toBe('Erste offenZweite  zu.');
   });
 });
 
@@ -113,8 +116,11 @@ describe('renderCriticMarkup — what it leaves alone', () => {
     expect(render(html).innerHTML).toBe(html);
   });
 
-  it('leaves an unterminated marker literal', () => {
-    expect(textOf('<p>Sie {++ ging fort.</p>')).toBe('Sie {++ ging fort.');
+  // It used to stay literal, which was the silent failure: braces that do not
+  // parse look exactly like braces the writer meant. The prose is untouched;
+  // only the marker goes. The drawer is where the writer is told why.
+  it('hides an unterminated marker and keeps the prose', () => {
+    expect(textOf('<p>Sie {++ ging fort.</p>')).toBe('Sie  ging fort.');
   });
 
   it('leaves markup inside a code element alone', () => {
@@ -186,5 +192,17 @@ describe('renderCriticMarkup — the substitution separator', () => {
     const root = render('<p>Sie {++leise ++}ging.</p>');
     expect(root.querySelector('.ms-critic-arrow')).toBeNull();
     expect(root.querySelector('.ms-critic-insertion')?.textContent).toBe('leise ');
+  });
+});
+
+describe('renderCriticMarkup — a mark that spans two blocks', () => {
+  it('hides an unmatched marker rather than showing braces', () => {
+    const root = render('<p>Sie ging{-- fort.</p><p>Der Regen--} blieb.</p>');
+    expect(root.textContent).toBe('Sie ging fort.Der Regen blieb.');
+  });
+
+  it('leaves an unmatched marker inside code alone', () => {
+    const root = render('<p>So schreibt man <code>{--</code> hin.</p>');
+    expect(root.textContent).toBe('So schreibt man {-- hin.');
   });
 });
