@@ -540,6 +540,93 @@ export function parseCritic(content: string): Entry[] {
   return entries;
 }
 
+// ─── Checking ───
+
+export type FaultKind = 'unmatched-opener' | 'unmatched-closer' | 'no-arrow' | 'empty-body';
+
+/**
+ * Something wrong with the markup that the parser cannot report by failing.
+ *
+ * `entryFrom` is the join to the drawer: a fault belonging to a construct the
+ * parser accepted is drawn on that construct's card, because the card that
+ * renders wrong is the one that should carry the warning. A fault with no entry
+ * gets a row of its own.
+ */
+export interface Fault {
+  kind: FaultKind;
+  /** What to reveal in the editor: the marker, or the whole malformed construct. */
+  at: Range;
+  /** The entry this fault belongs to, or null when no entry claims it. */
+  entryFrom: number | null;
+}
+
+/** Every CriticMarkup marker, opening and closing. Obsidian's own are not here. */
+const TOKEN_RE = /\{\+\+|\+\+\}|\{--|--\}|\{~~|~~\}|\{==|==\}|\{>>|<<\}/g;
+
+/**
+ * Everything wrong with a note's markup, in document order.
+ *
+ * The point is that stray markup is silent. A marker that never finds its
+ * partner does not match, so the braces sit in the prose as ordinary text and
+ * nothing tells the writer — a failure the plugin has always had and never
+ * reported.
+ *
+ * Derived from `parseCritic` rather than forming a second opinion about what
+ * counts as markup, for the reason every renderer here reads its geometry from
+ * one parse: two opinions eventually differ, and the difference looks like the
+ * plugin lying about one of them.
+ *
+ * A marker inside a comment counts as consumed, because a note's braces are
+ * literal text. That falls out of `spans.comment` covering the whole construct.
+ */
+export function checkMarkup(content: string): Fault[] {
+  const skip = skipRegions(content);
+  const entries = parseCritic(content);
+  const faults: Fault[] = [];
+
+  const consumed: Range[] = [];
+  for (const entry of entries) {
+    for (const marker of entry.spans.markers) {
+      if (marker.to > marker.from) consumed.push(marker);
+    }
+    if (entry.spans.comment !== null) consumed.push(entry.spans.comment);
+  }
+
+  TOKEN_RE.lastIndex = 0;
+  for (let m = TOKEN_RE.exec(content); m !== null; m = TOKEN_RE.exec(content)) {
+    const at = { from: m.index, to: m.index + m[0].length };
+    if (overlaps(skip, at.from, at.to)) continue;
+    if (consumed.some((r) => at.from >= r.from && at.to <= r.to)) continue;
+    faults.push({
+      kind: m[0].startsWith('{') ? 'unmatched-opener' : 'unmatched-closer',
+      at,
+      entryFrom: null,
+    });
+  }
+
+  for (const entry of entries) {
+    if (entry.native) continue;
+    const at = { from: entry.from, to: entry.to };
+
+    // A `{~~…~~}` the parser had to read as a deletion, because there was no
+    // arrow to split on. The writer meant "replace" and got "cut".
+    if (entry.kind === 'deletion' && content.startsWith('{~~', entry.from)) {
+      faults.push({ kind: 'no-arrow', at, entryFrom: entry.from });
+      continue;
+    }
+
+    // An empty deletion or highlight is malformed rather than half-written — no
+    // command produces one. An empty insertion or replacement is the opposite:
+    // that is exactly what `Suggest a change` writes, and the placeholder stands
+    // in it until the words arrive.
+    if ((entry.kind === 'deletion' || entry.kind === 'highlight') && entry.quote === '') {
+      faults.push({ kind: 'empty-body', at, entryFrom: entry.from });
+    }
+  }
+
+  return faults.sort((a, b) => a.at.from - b.at.from);
+}
+
 // ─── Transforms ───
 
 /**

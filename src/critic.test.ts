@@ -1,4 +1,5 @@
 import {
+  checkMarkup,
   parseCritic,
   applyEntry,
   minimalEdit,
@@ -912,5 +913,74 @@ describe('renderAccepted / renderRejected — nested marks', () => {
 
   it('rejecting an insertion drops what was inside it', () => {
     expect(renderRejected('{++neu {--weg--} da++}')).toBe('');
+  });
+});
+
+describe('checkMarkup', () => {
+  const kinds = (content: string) => checkMarkup(content).map((f) => f.kind);
+
+  it('finds nothing in a note whose marks are all closed', () => {
+    expect(checkMarkup('Sie {--ging--} fort. {++leise++}')).toEqual([]);
+  });
+
+  it('reports an opening marker with no closing marker', () => {
+    const faults = checkMarkup('Sie {-- ging fort.');
+    expect(faults).toHaveLength(1);
+    expect(faults[0].kind).toBe('unmatched-opener');
+    expect(faults[0].at).toEqual({ from: 4, to: 7 });
+    expect(faults[0].entryFrom).toBeNull();
+  });
+
+  it('reports a closing marker with no opening marker', () => {
+    expect(kinds('Sie ging fort--} und blieb.')).toEqual(['unmatched-closer']);
+  });
+
+  it('reports both, in document order', () => {
+    expect(kinds('a ++} b {-- c')).toEqual(['unmatched-closer', 'unmatched-opener']);
+  });
+
+  // Legal nesting. This was on an earlier draft of the fault list in error.
+  it('says nothing about a mark inside a mark', () => {
+    expect(checkMarkup('{--a {++b++} c--}')).toEqual([]);
+  });
+
+  // Same-kind nesting is the one case the format cannot express. The outer mark
+  // closes at the first closer it meets, which leaves the inner opener with
+  // nothing to close it and the last closer with nothing that opened it. Both
+  // are true, and saying both is what tells the writer where the two ends are.
+  it('reports both ends of same-kind nesting', () => {
+    expect(kinds('{--a {--b--} c--}')).toEqual(['unmatched-opener', 'unmatched-closer']);
+    expect(checkMarkup('{--a {--b--} c--}').map((f) => f.at.from)).toEqual([5, 13]);
+  });
+
+  it('ignores markers in fenced code, inline code and frontmatter', () => {
+    expect(checkMarkup('---\ntitle: {--\n---\n\n`{--` und\n\n```\n{--\n```\n')).toEqual([]);
+  });
+
+  it('reports a substitution with no arrow, against its own entry', () => {
+    const src = '{~~Dann drehte sie sich um~~}';
+    const faults = checkMarkup(src);
+    expect(faults).toHaveLength(1);
+    expect(faults[0].kind).toBe('no-arrow');
+    expect(faults[0].entryFrom).toBe(0);
+    expect(faults[0].at).toEqual({ from: 0, to: src.length });
+  });
+
+  it('reports an empty body, against its own entry', () => {
+    expect(kinds('{----}')).toEqual(['empty-body']);
+    expect(kinds('{====}')).toEqual(['empty-body']);
+  });
+
+  // An empty replacement is a half-written suggestion, not a malformed mark:
+  // `Suggest a change` writes exactly that and the placeholder stands in it.
+  it('says nothing about an insertion or a replacement still being typed', () => {
+    expect(checkMarkup('{++++}')).toEqual([]);
+    expect(checkMarkup('{~~alt~>~~}')).toEqual([]);
+  });
+
+  // A lone `%%` or `==` is ordinary Obsidian markdown far more often than it
+  // is a broken mark.
+  it('says nothing about Obsidian’s own markers', () => {
+    expect(checkMarkup('Ein ==Wort== und %% eine Notiz %%')).toEqual([]);
   });
 });
