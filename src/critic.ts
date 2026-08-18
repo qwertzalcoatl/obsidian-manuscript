@@ -226,17 +226,15 @@ function simple(
   };
 }
 
-/** A blank line ends a paragraph, and no construct may cross one. */
-const BLANK_LINE = /\n[ \t]*\n/;
-
 /**
  * A note's text, made safe to put inside its own markers.
  *
  * The format has no escape syntax, so what a body cannot hold is defused
- * rather than escaped. A blank line makes BLANK_LINE above refuse the whole
- * construct and the note stops rendering — the loudest possible failure for
- * the quietest possible keystroke. The closing marker ends the construct
- * early, truncating the note and spilling the rest into the manuscript.
+ * rather than escaped. A blank line inside a note is flattened rather than
+ * kept: a note is one remark, and the drawer shows it in a field that grows
+ * with its text but reads as one. The manuscript is where prose with
+ * paragraphs in it belongs. The closing marker ends the construct early,
+ * truncating the note and spilling the rest into the manuscript.
  *
  * A space goes into the sequence rather than the sequence being dropped: the
  * realistic collision is a German writer setting guillemets as >>Wort<< with a
@@ -275,18 +273,6 @@ function scanCritic(content: string, skip: Range[]): Raw[] {
   for (let m = CRITIC_RE.exec(content); m !== null; m = CRITIC_RE.exec(content)) {
     const from = m.index;
     const to = from + m[0].length;
-
-    // An opening marker that only finds its partner several paragraphs later
-    // is a typo, not a construct — and honouring it would swallow whole
-    // paragraphs. Reading view cannot see across a block boundary either, so
-    // refusing here is also what keeps the two display modes agreeing.
-    //
-    // Resume one character in rather than past the match: a real construct
-    // sitting inside the rejected span still has to be found.
-    if (BLANK_LINE.test(m[0])) {
-      CRITIC_RE.lastIndex = from + 1;
-      continue;
-    }
 
     if (overlaps(skip, from, to)) continue;
 

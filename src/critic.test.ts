@@ -176,19 +176,32 @@ describe('parseCritic — tolerance', () => {
     expect(e.quote).toBe('alter\nText');
   });
 
-  // Reading view groups text by block and cannot see across a paragraph
-  // boundary; if the parser could, the two display modes would disagree. It
-  // also bounds the damage of a stray opening marker.
-  it('refuses a construct that crosses a blank line', () => {
-    expect(parseCritic('Ein {++neuer\n\nAbsatz++} hier.')).toEqual([]);
-    expect(parseCritic('{>>oben\n\nunten<<}')).toEqual([]);
+  it('reads a deletion that crosses a blank line', () => {
+    const src = 'Sie stand am Fenster{-- und sah hinaus.\n\nDer Regen--} hatte aufgehört.';
+    const e = one(src);
+    expect(e.kind).toBe('deletion');
+    expect(e.quote).toBe(' und sah hinaus.\n\nDer Regen');
   });
 
-  it('still finds a real construct inside a rejected span', () => {
-    const entries = parseCritic('{++ vergessen\n\nspäter {--echt--} hier ++}');
-    expect(entries).toHaveLength(1);
-    expect(entries[0].kind).toBe('deletion');
-    expect(entries[0].quote).toBe('echt');
+  it('reads an insertion that crosses a blank line', () => {
+    const e = one('Ein {++neuer\n\nAbsatz++} hier.');
+    expect(e.kind).toBe('insertion');
+    expect(e.quote).toBe('neuer\n\nAbsatz');
+  });
+
+  it('reads a comment that crosses a blank line', () => {
+    const e = one('{>>oben\n\nunten<<}');
+    expect(e.kind).toBe('comment');
+    expect(e.comment).toBe('oben\n\nunten');
+  });
+
+  // The merge of the design spec: the quoted half is the paragraph break
+  // itself, and accepting it makes one paragraph out of two.
+  it('reads a substitution whose quoted half is a paragraph break', () => {
+    const e = one('…hinaus.{~~\n\n~> ~~}Der Regen…');
+    expect(e.kind).toBe('substitution');
+    expect(e.quote).toBe('\n\n');
+    expect(e.replacement).toBe(' ');
   });
 
   it('reads two adjacent constructs as two entries, not a substitution', () => {
