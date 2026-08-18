@@ -10,13 +10,15 @@
  * notice after clicking into a sentence and finding braces under the cursor.
  */
 
-import { EditorState } from '@codemirror/state';
+import { EditorState, RangeSet } from '@codemirror/state';
+import { Decoration } from '@codemirror/view';
 import {
   constructToSelectOnDelete,
   criticDecorations,
   criticField,
   emptyBodyOf,
   emptyConstructAt,
+  entryAt,
   flashEffect,
   flashField,
   flashRangesFor,
@@ -778,5 +780,53 @@ describe('emptyConstructAt — what Escape throws away', () => {
       selection: { anchor: 7 },
     }).update({ effects: unfoldEffect.of({ from: 4, to: 10 }) }).state;
     expect(emptyConstructAt(revealed, 7)).toBeNull();
+  });
+});
+
+describe('entryAt — the innermost mark wins', () => {
+  const NESTED = '{--Sie zählte. {~~Dann~>Schließlich~~} Ende.--}';
+
+  it('returns the inner mark for a position inside it', () => {
+    const entries = parseCritic(NESTED);
+    const inner = entries.find((e) => e.kind === 'substitution')!;
+    expect(entryAt(entries, inner.from + 4)?.kind).toBe('substitution');
+  });
+
+  it('returns the outer mark for a position only it covers', () => {
+    const entries = parseCritic(NESTED);
+    expect(entryAt(entries, 5)?.kind).toBe('deletion');
+  });
+
+  it('returns null outside every mark', () => {
+    expect(entryAt(parseCritic('Sie ging fort.'), 3)).toBeNull();
+  });
+});
+
+describe('criticDecorations — what nesting could break', () => {
+  // Overlapping mark decorations are fine; two overlapping *replacing* ones are
+  // not. The case that can produce them is an unanchored comment whose whole
+  // line is collapsed with a block replacement, sitting inside a mark that spans
+  // the paragraphs around it.
+  it('does not throw on a collapsed comment line inside a spanning mark', () => {
+    expect(() => paint('{--P1\n\n{>>Notiz<<}\n\nP2--}')).not.toThrow();
+  });
+
+  // hiddenRanges walks entry by entry, so nesting returns the outer mark's
+  // closing marker before the inner mark's opening one. Both consumers pass
+  // sort: true, so this is safe — asserted rather than assumed, because the
+  // failure would be a thrown range set on a note that merely nests.
+  it('produces hidden ranges out of document order without complaint', () => {
+    const state = EditorState.create({
+      doc: '{--a {++b++} c--}',
+      extensions: [unfoldField, criticField],
+    });
+    const ranges = hiddenRanges(state);
+    expect(ranges.length).toBeGreaterThan(2);
+    expect(() =>
+      RangeSet.of(
+        ranges.map((r) => Decoration.replace({}).range(r.from, r.to)),
+        true
+      )
+    ).not.toThrow();
   });
 });

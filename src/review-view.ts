@@ -380,10 +380,16 @@ export class ReviewView extends ItemView {
    * two.
    */
   private rowStartCovering(offset: number): number | null {
-    const card = this.cards.find((c) => offset >= c.entry.from && offset < c.entry.to);
-    if (card) return card.entry.from;
-    const block = this.blocks.find((b) => offset >= b.from && offset < b.to);
-    return block ? block.from : null;
+    // Narrowest wins: with nesting, a click inside an inner mark is also inside
+    // the mark containing it, and the card the reader meant is the inner one.
+    let best: { from: number; width: number } | null = null;
+    const consider = (from: number, to: number) => {
+      if (offset < from || offset >= to) return;
+      if (best === null || to - from < best.width) best = { from, width: to - from };
+    };
+    for (const card of this.cards) consider(card.entry.from, card.entry.to);
+    for (const block of this.blocks) consider(block.from, block.to);
+    return best === null ? null : (best as { from: number; width: number }).from;
   }
 
   private paint(): void {

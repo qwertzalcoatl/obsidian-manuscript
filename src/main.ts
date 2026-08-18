@@ -33,6 +33,7 @@ import { editorialInsertion } from "./editorial";
 import {
   criticEditorExtension,
   criticField,
+  entryAt,
   renderCriticMarkup,
   unfoldEffect,
   unfoldField,
@@ -1541,9 +1542,9 @@ export default class ManuscriptPlugin extends Plugin {
         if (!cm) return false;
 
         const pos = cm.state.selection.main.head;
-        const entry = cm.state
-          .field(criticField)
-          .find((e) => pos >= e.from && pos <= e.to);
+        // The innermost construct at the caret: repairing a substitution that
+        // sits inside a cut means the substitution.
+        const entry = entryAt(cm.state.field(criticField), pos);
         if (!entry) return false;
 
         if (!checking) {

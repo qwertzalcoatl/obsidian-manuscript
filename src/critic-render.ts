@@ -220,6 +220,23 @@ function isRevealed(unfold: Range | null, entry: Entry): boolean {
 }
 
 /**
+ * The narrowest mark covering `pos`, or null.
+ *
+ * Narrowest rather than first: with nesting, a position inside an inner mark is
+ * also inside the mark containing it, and a `.find()` over a list sorted by
+ * start offset answers with the outer one. Clicking a substitution that sits
+ * inside a cut means the substitution.
+ */
+export function entryAt(entries: readonly Entry[], pos: number): Entry | null {
+  let best: Entry | null = null;
+  for (const entry of entries) {
+    if (pos < entry.from || pos > entry.to) continue;
+    if (best === null || entry.to - entry.from < best.to - best.from) best = entry;
+  }
+  return best;
+}
+
+/**
  * Every decoration the editor paints for a document, derived from nothing but
  * the state passed in.
  *
@@ -643,7 +660,7 @@ export function criticEditorExtension(onReveal: (offset: number) => void): Exten
         if (event.button !== 0) return false;
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         if (pos === null) return false;
-        const hit = view.state.field(criticField).find((e) => pos >= e.from && pos <= e.to);
+        const hit = entryAt(view.state.field(criticField), pos);
         if (hit) onReveal(hit.from);
         return false;
       },
