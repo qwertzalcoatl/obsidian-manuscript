@@ -892,3 +892,25 @@ describe('parseCritic — marks inside marks', () => {
     expect(es[1].comment).toBe('warum');
   });
 });
+
+describe('renderAccepted / renderRejected — nested marks', () => {
+  const NESTED = '{--Sie zählte. {~~Dann~>Schließlich~~} Ende.--}';
+
+  it('accepting the cut takes the mark inside it too', () => {
+    expect(renderAccepted(NESTED)).toBe('');
+  });
+
+  // The case that forces inside-out order. Rejecting a cut keeps its quoted
+  // text verbatim, and that text still holds a substitution.
+  it('rejecting the cut leaves no markup behind', () => {
+    expect(renderRejected(NESTED)).toBe('Sie zählte. Dann Ende.');
+  });
+
+  it('accepting an insertion keeps the resolved text of a mark inside it', () => {
+    expect(renderAccepted('{++neu {--weg--} da++}')).toBe('neu  da');
+  });
+
+  it('rejecting an insertion drops what was inside it', () => {
+    expect(renderRejected('{++neu {--weg--} da++}')).toBe('');
+  });
+});

@@ -700,17 +700,50 @@ export function suggestChange(selection: string): { text: string; caret: number 
   return { text: `{~~${selection}~>~~}`, caret: 3 + selection.length + 2 };
 }
 
+/** The entries no other entry contains, in document order. */
+function topLevel(entries: Entry[]): Entry[] {
+  return entries.filter(
+    (e) => !entries.some((o) => o !== e && o.from <= e.from && o.to >= e.to)
+  );
+}
+
+/**
+ * Settles every mark in a note, innermost first.
+ *
+ * Two steps rather than one, because `applyEdits` requires its edits not to
+ * overlap and nested entries overlap by definition. Only the top-level marks
+ * become edits; what each one resolves to is settled recursively first.
+ *
+ * Rejecting is what forces this order. Rejecting a cut keeps its quoted text
+ * verbatim, and that text can still hold a mark — so settling the outer one
+ * first would leave markup in a note that had just been declared settled. Worse
+ * than leaving it: the outer edit carries offsets taken before the inner edit
+ * shortened the string, so it overwrites whatever the inner one wrote.
+ */
 function renderAll(content: string, suggestionMode: 'accept' | 'reject'): string {
-  const edits = parseCritic(content).map((entry) => ({
+  const edits = topLevel(parseCritic(content)).map((entry) => ({
     from: entry.from,
     to: entry.to,
-    // Annotations have no accept/reject distinction — they resolve either way.
-    text: resolvedText(
-      entry,
-      entry.kind === 'highlight' || entry.kind === 'comment' ? 'resolve' : suggestionMode
-    ),
+    text: resolveDeep(entry, suggestionMode),
   }));
   return applyEdits(content, edits);
+}
+
+/**
+ * What one mark resolves to, with any mark inside it resolved first.
+ *
+ * The recursion terminates because every pass removes at least one construct's
+ * markers, so the string it recurses on is strictly shorter. The `includes`
+ * guard keeps it from re-parsing prose that plainly holds nothing — which also
+ * spares a fragment beginning with `---` from being read as frontmatter.
+ */
+function resolveDeep(entry: Entry, suggestionMode: 'accept' | 'reject'): string {
+  // Annotations have no accept/reject distinction — they resolve either way.
+  const text = resolvedText(
+    entry,
+    entry.kind === 'highlight' || entry.kind === 'comment' ? 'resolve' : suggestionMode
+  );
+  return text.includes('{') ? renderAll(text, suggestionMode) : text;
 }
 
 /**
