@@ -775,7 +775,33 @@ export function setComment(content: string, entry: Entry, text: string): string 
  * Both constructs are written empty on purpose. The words are typed into the
  * manuscript afterwards, which is where manuscript text belongs.
  */
-export function suggestChange(selection: string): { text: string; caret: number } | null {
+/**
+ * Whether a selection should be wrapped with its markers on their own lines.
+ *
+ * `block` when the selection crosses a paragraph boundary **and** both its edges
+ * sit on one. Anything else is `inline`, and that is what makes a paragraph
+ * merge expressible rather than a special case: markers inside two sentences say
+ * "join these paragraphs", markers on their own lines say "these whole
+ * paragraphs".
+ *
+ * One whole paragraph is deliberately `inline`. The block form would add two
+ * lines of syntax and change nothing about how the mark renders or resolves.
+ */
+export function wrapForm(content: string, from: number, to: number): 'inline' | 'block' {
+  if (!/\n[ \t]*\n/.test(content.slice(from, to))) return 'inline';
+
+  const before = content.slice(0, from);
+  const after = content.slice(to);
+  const atParagraphStart = before === '' || /(?:^|\n)[ \t]*\n[ \t]*$/.test(before);
+  const atParagraphEnd = after === '' || /^[ \t]*\n[ \t]*(?:\n|$)/.test(after);
+
+  return atParagraphStart && atParagraphEnd ? 'block' : 'inline';
+}
+
+export function suggestChange(
+  selection: string,
+  form: 'inline' | 'block' = 'inline'
+): { text: string; caret: number } | null {
   if (selection === '') return { text: '{++++}', caret: 3 };
 
   // A selection carrying either of the substitution's own markers cannot be
@@ -783,6 +809,16 @@ export function suggestChange(selection: string): { text: string; caret: number 
   // closes it early, and both do it quietly. Refusing beats guessing, for the
   // same reason resolvedText throws rather than picking an outcome.
   if (selection.includes('~>') || selection.includes('~~}')) return null;
+
+  // The block form's arrow sits on its own line. isBlockForm recognises what
+  // this writes, so simple() gives each marker the newline against its inside
+  // edge and the construct parses back with the quoted half exactly `selection`
+  // and the replacement exactly empty — which is also what puts the caret on the
+  // boundary between the arrow marker and the closing one, the only position in
+  // an empty replacement it can hold.
+  if (form === 'block') {
+    return { text: `{~~\n${selection}\n~>\n~~}`, caret: 3 + 1 + selection.length + 1 + 2 };
+  }
 
   return { text: `{~~${selection}~>~~}`, caret: 3 + selection.length + 2 };
 }

@@ -8,6 +8,7 @@ import {
   sanitizeComment,
   setComment,
   suggestChange,
+  wrapForm,
   type Entry,
 } from './critic';
 
@@ -982,5 +983,49 @@ describe('checkMarkup', () => {
   // is a broken mark.
   it('says nothing about Obsidian’s own markers', () => {
     expect(checkMarkup('Ein ==Wort== und %% eine Notiz %%')).toEqual([]);
+  });
+});
+
+describe('wrapForm', () => {
+  const SHEET = 'A.\n\nP1\n\nP2\n\nB.';
+
+  it('asks for the block form when whole paragraphs are selected', () => {
+    expect(wrapForm(SHEET, 4, 10)).toBe('block');
+  });
+
+  it('asks for the inline form for one whole paragraph', () => {
+    expect(wrapForm(SHEET, 4, 6)).toBe('inline');
+  });
+
+  it('asks for the inline form from mid-sentence to mid-sentence', () => {
+    const src = 'Sie stand am Fenster und sah hinaus.\n\nDer Regen hatte aufgehört.';
+    expect(wrapForm(src, 20, 44)).toBe('inline');
+  });
+
+  it('asks for the block form for a whole note of two paragraphs', () => {
+    const src = 'P1\n\nP2';
+    expect(wrapForm(src, 0, src.length)).toBe('block');
+  });
+
+  it('asks for the inline form when only the start is clean', () => {
+    expect(wrapForm(SHEET, 4, 9)).toBe('inline');
+  });
+});
+
+describe('suggestChange — the block form', () => {
+  it('writes a replacement with the arrow on its own line', () => {
+    const change = suggestChange('P1\n\nP2', 'block');
+    expect(change?.text).toBe('{~~\nP1\n\nP2\n~>\n~~}');
+  });
+
+  it('puts the caret in the empty replacement, between two hidden markers', () => {
+    const change = suggestChange('alt', 'block');
+    const e = one(change!.text);
+    expect(e.spans.replacement).toEqual({ from: change!.caret, to: change!.caret });
+  });
+
+  it('leaves the inline form as it was', () => {
+    expect(suggestChange('alt')).toEqual({ text: '{~~alt~>~~}', caret: 8 });
+    expect(suggestChange('')).toEqual({ text: '{++++}', caret: 3 });
   });
 });
