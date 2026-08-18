@@ -1029,3 +1029,21 @@ describe('suggestChange — the block form', () => {
     expect(suggestChange('')).toEqual({ text: '{++++}', caret: 3 });
   });
 });
+
+describe('parseCritic — blockForm', () => {
+  it('is true for a mark whose markers sit on their own lines', () => {
+    expect(one('{--\nP1\n\nP2\n--}').blockForm).toBe(true);
+  });
+
+  it('is false for a mark inside a sentence, even across a blank line', () => {
+    expect(one('Sie{-- ging.\n\nDann--} kam sie.').blockForm).toBe(false);
+  });
+
+  it('is false for a standalone comment', () => {
+    expect(one('{>>Notiz<<}').blockForm).toBe(false);
+  });
+
+  it('is false for a merge, whose newlines are its content', () => {
+    expect(one('…hinaus.{~~\n\n~> ~~}Der Regen…').blockForm).toBe(false);
+  });
+});

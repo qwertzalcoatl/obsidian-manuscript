@@ -75,6 +75,16 @@ export interface Entry {
   line: string;
   /** Came from Obsidian's `%%…%%` rather than CriticMarkup braces. */
   native: boolean;
+  /**
+   * Written with its markers on their own lines.
+   *
+   * Reported rather than re-derived, for the reason `spans` exists: three
+   * consumers need it — both renderers and the drawer card — and each one
+   * working it out from marker lengths is how they come to disagree. True
+   * exactly when `isBlockForm` said so, which is also when the markers absorbed
+   * their adjacent newlines.
+   */
+  blockForm: boolean;
   /** Source geometry for the inline renderers. */
   spans: Spans;
 }
@@ -488,6 +498,8 @@ export function parseCritic(content: string): Entry[] {
         comment: raw.quote.trim(),
         line: lineAt(content, raw.from),
         native: raw.native,
+        // A note has no form. Where its own markers sit changes nothing about it.
+        blockForm: false,
         // The construct is hidden whole, so its own markers are not listed
         // separately — they are inside what gets replaced.
         spans: {
@@ -525,6 +537,7 @@ export function parseCritic(content: string): Entry[] {
       comment: attached ? next.quote.trim() : null,
       line: lineAt(content, raw.from),
       native: raw.native,
+      blockForm: raw.blockForm,
       spans: {
         markers: raw.markers,
         quote: raw.quoteAt,
