@@ -15,6 +15,7 @@ import {
   Editor,
   Notice,
   normalizePath,
+  Platform,
   setIcon,
   type Hotkey,
 } from "obsidian";
@@ -31,13 +32,14 @@ import {
 import {
   parseCritic,
   renderAccepted,
-  renderRejected,
+  resolveChanges,
   suggestChange,
   wrapForm,
 } from "./critic";
 import { editorialInsertion } from "./editorial";
 import {
   COMMENT_HOTKEYS,
+  hotkeysFor,
   SUGGEST_CHANGE_HOTKEYS,
   SUGGEST_DELETION_HOTKEYS,
 } from "./hotkeys";
@@ -1600,7 +1602,7 @@ export default class ManuscriptPlugin extends Plugin {
       "comment-on-selection",
       "Comment on selection",
       "comment",
-      COMMENT_HOTKEYS
+      hotkeysFor(COMMENT_HOTKEYS, Platform.isMacOS)
     );
     this.addSelectionCommand("highlight-selection", "Highlight selection", "highlight");
     // Minus for a cut, plus for an addition or a replacement. Each binding is a
@@ -1610,7 +1612,7 @@ export default class ManuscriptPlugin extends Plugin {
       "suggest-deletion",
       "Suggest deletion",
       "deletion",
-      SUGGEST_DELETION_HOTKEYS
+      hotkeysFor(SUGGEST_DELETION_HOTKEYS, Platform.isMacOS)
     );
 
     // The only command that works without a selection, because that is the
@@ -1622,7 +1624,7 @@ export default class ManuscriptPlugin extends Plugin {
     this.addCommand({
       id: "suggest-change",
       name: "Suggest a change",
-      hotkeys: SUGGEST_CHANGE_HOTKEYS,
+      hotkeys: hotkeysFor(SUGGEST_CHANGE_HOTKEYS, Platform.isMacOS),
       editorCallback: (editor) => {
         const from = editor.posToOffset(editor.getCursor("from"));
         const to = editor.posToOffset(editor.getCursor("to"));
@@ -1701,13 +1703,13 @@ export default class ManuscriptPlugin extends Plugin {
     this.addCommand({
       id: "accept-all-markup",
       name: "Accept all markup in this note",
-      editorCallback: (editor) => this.resolveAll(editor, renderAccepted),
+      editorCallback: (editor) => this.resolveAll(editor, "accept"),
     });
 
     this.addCommand({
       id: "reject-all-markup",
       name: "Reject all markup in this note",
-      editorCallback: (editor) => this.resolveAll(editor, renderRejected),
+      editorCallback: (editor) => this.resolveAll(editor, "reject"),
     });
 
     this.registerEvent(
@@ -1773,14 +1775,22 @@ export default class ManuscriptPlugin extends Plugin {
     }
   }
 
-  private resolveAll(editor: Editor, transform: (content: string) => string): void {
-    const content = editor.getValue();
-    const next = transform(content);
-    if (next === content) {
+  private resolveAll(editor: Editor, mode: "accept" | "reject"): void {
+    const changes = resolveChanges(editor.getValue(), mode);
+    if (changes.length === 0) {
       new Notice("No markup in this note.");
       return;
     }
-    editor.replaceRange(next, editor.offsetToPos(0), editor.offsetToPos(content.length));
+    // One replacement per mark, so the caret and scroll survive in the prose
+    // between them. This used to replace the whole note, which sent the caret
+    // to the top.
+    editor.transaction({
+      changes: changes.map((c) => ({
+        from: editor.offsetToPos(c.from),
+        to: editor.offsetToPos(c.to),
+        text: c.text,
+      })),
+    });
   }
 
   /**

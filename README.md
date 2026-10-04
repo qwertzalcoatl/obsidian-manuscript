@@ -157,12 +157,9 @@ does. **The archive is append-only** — nothing here ever deletes from it, so
 - A mistyped opening marker claims the closing marker of the next mark of its
   kind, so it can strike through several paragraphs at once. `⌘Z` undoes it, and
   the drawer names it.
-- **Accept all** / **Reject all** rewrite everything between the first and last
-  mark in one edit, so the cursor can move. Deciding marks one at a time does not.
-- `⌃⌘M`, `⌃⌘-` and `⌃⌘+` are macOS bindings for a German or US layout. Obsidian tells a
-  plugin which character a key typed and which US-labelled key it sits under, and
-  neither identifies "the minus key" on every board — so on Windows, on Linux, or
-  on a layout that reaches these keys some third way, record your own in
+- On Windows and Linux the three shortcuts are `Ctrl+Alt+M`, `Ctrl+Alt+-` and
+  `Ctrl+Alt++` (`⌃⌘` on macOS). Ctrl+Alt is AltGr on many Windows layouts, so a
+  board that types characters with AltGr may swallow one; record your own in
   **Settings > Hotkeys**, which overrides the defaults. They avoid `⌘⇧`, where
   Obsidian's own Zoom in wins.
 - In Reading view only CriticMarkup renders — Obsidian strips `%%comments%%`

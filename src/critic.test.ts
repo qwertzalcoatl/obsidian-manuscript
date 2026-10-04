@@ -3,6 +3,7 @@ import {
   parseCritic,
   applyEntry,
   minimalEdit,
+  resolveChanges,
   nestingDepth,
   renderAccepted,
   renderRejected,
@@ -1058,5 +1059,44 @@ describe('nestingDepth', () => {
   it('counts the marks containing each one', () => {
     const es = parseCritic('{--a {++b {==c==}++} d--}');
     expect(es.map((e) => nestingDepth(es, e))).toEqual([0, 1, 2]);
+  });
+});
+
+describe('resolveChanges — Accept all / Reject all as one edit per mark', () => {
+  const apply = (src: string, cs: { from: number; to: number; text: string }[]) =>
+    [...cs].sort((a, b) => b.from - a.from).reduce(
+      (out, c) => out.slice(0, c.from) + c.text + out.slice(c.to),
+      src
+    );
+
+  const SAMPLES = [
+    'Eins {--zwei--} drei.\n\nVier {++fünf++} sechs {~~sieben~>acht~~} neun.',
+    'Eins.\n\n{>>nur eine Notiz<<}\n\nZwei.',
+    '{>>a<<}\n{>>b<<}\nText',
+    '{>>a<<} {>>b<<}\nText',
+    'Text {>>a<<}',
+    'x {--a {++b++} c--} y {==z==}',
+    'Ohne Markup.',
+  ];
+
+  for (const mode of ['accept', 'reject'] as const) {
+    const render = mode === 'accept' ? renderAccepted : renderRejected;
+    it(`${mode}: applying the changes equals the whole-note transform`, () => {
+      for (const src of SAMPLES) {
+        expect(apply(src, resolveChanges(src, mode))).toBe(render(src));
+      }
+    });
+  }
+
+  it('leaves the prose between two marks untouched', () => {
+    const src = 'a {--b--} MITTE {++c++} d';
+    const cs = resolveChanges(src, 'accept');
+    expect(cs).toHaveLength(2);
+    const middle = src.indexOf('MITTE');
+    for (const c of cs) expect(c.to <= middle || c.from >= middle + 5).toBe(true);
+  });
+
+  it('is empty when there is nothing to resolve', () => {
+    expect(resolveChanges('Ohne Markup.', 'accept')).toEqual([]);
   });
 });

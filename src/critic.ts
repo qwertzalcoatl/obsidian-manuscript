@@ -673,7 +673,7 @@ function resolvedText(entry: Entry, mode: Mode): string {
   throw new Error(`Cannot ${mode} a ${entry.kind}.`);
 }
 
-interface Edit {
+export interface Edit {
   from: number;
   to: number;
   text: string;
@@ -687,7 +687,7 @@ interface Edit {
  * resolving a comment that occupied its own line would leave a blank line
  * behind every time.
  */
-function applyEdits(content: string, edits: Edit[]): string {
+function applyEdits(content: string, edits: Edit[], applied?: Edit[]): string {
   let out = content;
 
   for (const edit of [...edits].sort((a, b) => b.from - a.from)) {
@@ -719,6 +719,7 @@ function applyEdits(content: string, edits: Edit[]): string {
       }
     }
 
+    applied?.push({ from, to, text: edit.text });
     out = out.slice(0, from) + edit.text + out.slice(to);
   }
 
@@ -867,12 +868,15 @@ function topLevel(entries: Entry[]): Entry[] {
  * shortened the string, so it overwrites whatever the inner one wrote.
  */
 function renderAll(content: string, suggestionMode: 'accept' | 'reject'): string {
-  const edits = topLevel(parseCritic(content)).map((entry) => ({
+  return applyEdits(content, topLevelEdits(content, suggestionMode));
+}
+
+function topLevelEdits(content: string, suggestionMode: 'accept' | 'reject'): Edit[] {
+  return topLevel(parseCritic(content)).map((entry) => ({
     from: entry.from,
     to: entry.to,
     text: resolveDeep(entry, suggestionMode),
   }));
-  return applyEdits(content, edits);
 }
 
 /**
@@ -935,4 +939,66 @@ export function minimalEdit(
   }
 
   return { from: start, to: endBefore, text: after.slice(start, endAfter) };
+}
+
+/**
+ * What "Accept all" / "Reject all" change, as one replacement per mark rather
+ * than one for the whole stretch between the first mark and the last.
+ *
+ * A single replacement is a range, and CodeMirror sends a caret inside a
+ * replaced range to its edge — so a writer sitting between two marks, in prose
+ * nothing touches, was moved. Separate replacements leave that prose alone and
+ * the caret, selection and scroll with it.
+ *
+ * `applyEdits` works right to left on a string that is changing under it, so
+ * the ranges it reports are in the coordinates of that moment. They are mapped
+ * back to the original text here. Where that cannot be done exactly — a line
+ * collapse reaching into text an earlier edit had already written — or where
+ * the result would not equal what `renderAccepted` / `renderRejected` return,
+ * the single narrowed replacement is used instead: always correct, merely less
+ * gentle with the caret.
+ */
+export function resolveChanges(content: string, mode: 'accept' | 'reject'): Edit[] {
+  const expected = renderAll(content, mode);
+  const fallback = () => {
+    const one = minimalEdit(content, expected);
+    return one ? [one] : [];
+  };
+
+  const applied: Edit[] = [];
+  applyEdits(content, topLevelEdits(content, mode), applied);
+
+  // Undo, newest first, what the edits applied after this one did to its offsets.
+  const done: { from: number; textEnd: number; delta: number }[] = [];
+  const changes: Edit[] = [];
+
+  for (const edit of applied) {
+    const map = (offset: number): number | null => {
+      let p = offset;
+      for (let i = done.length - 1; i >= 0; i--) {
+        const d = done[i];
+        if (p >= d.textEnd) p += d.delta;
+        else if (p > d.from) return null;
+      }
+      return p;
+    };
+    const from = map(edit.from);
+    const to = map(edit.to);
+    if (from === null || to === null) return fallback();
+    changes.push({ from, to, text: edit.text });
+    done.push({
+      from: edit.from,
+      textEnd: edit.from + edit.text.length,
+      delta: edit.to - edit.from - edit.text.length,
+    });
+  }
+
+  changes.sort((a, b) => a.from - b.from);
+  let out = content;
+  for (let i = changes.length - 1; i >= 0; i--) {
+    const c = changes[i];
+    if (i + 1 < changes.length && c.to > changes[i + 1].from) return fallback();
+    out = out.slice(0, c.from) + c.text + out.slice(c.to);
+  }
+  return out === expected ? changes.filter((c) => c.to !== c.from || c.text !== '') : fallback();
 }

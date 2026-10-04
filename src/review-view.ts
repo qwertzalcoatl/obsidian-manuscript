@@ -22,8 +22,7 @@ import {
   minimalEdit,
   nestingDepth,
   parseCritic,
-  renderAccepted,
-  renderRejected,
+  resolveChanges,
   setComment,
   type Entry,
   type Fault,
@@ -825,16 +824,16 @@ export class ReviewView extends ItemView {
     e.stopPropagation();
     const menu = new Menu();
 
-    const bulk = (title: string, icon: string, transform: (c: string) => string) =>
+    const bulk = (title: string, icon: string, mode: 'accept' | 'reject') =>
       menu.addItem((item) =>
         item
           .setTitle(title)
           .setIcon(icon)
-          .onClick(() => this.applyBulk(transform))
+          .onClick(() => this.applyBulk(mode))
       );
 
-    bulk('Accept all', 'check-check', renderAccepted);
-    bulk('Reject all', 'x', renderRejected);
+    bulk('Accept all', 'check-check', 'accept');
+    bulk('Reject all', 'x', 'reject');
     menu.addSeparator();
     menu.addItem((item) =>
       item.setTitle('Notes are cleared either way').setDisabled(true)
@@ -843,7 +842,7 @@ export class ReviewView extends ItemView {
     menu.showAtMouseEvent(e);
   }
 
-  private applyBulk(transform: (content: string) => string): void {
+  private applyBulk(mode: 'accept' | 'reject'): void {
     const file = this.file;
     if (!file) return;
 
@@ -854,13 +853,23 @@ export class ReviewView extends ItemView {
     }
 
     const content = view.editor.getValue();
-    const next = transform(content);
-    if (next === content) {
+    const changes = resolveChanges(content, mode);
+    if (changes.length === 0) {
       new Notice('Nothing to resolve in this note.');
       return;
     }
 
-    this.write(view, content, next);
+    // One replacement per mark, in one transaction: prose between marks is not
+    // touched, so a caret there stays put, and Undo still takes it back at once.
+    const { editor } = view;
+    editor.transaction({
+      changes: changes.map((c) => ({
+        from: editor.offsetToPos(c.from),
+        to: editor.offsetToPos(c.to),
+        text: c.text,
+      })),
+    });
+    this.requestRefresh();
     new Notice('Markup resolved. Undo with ' + (Platform.isMacOS ? '⌘Z' : 'Ctrl+Z') + '.');
   }
 

@@ -24,6 +24,7 @@
 
 import {
   COMMENT_HOTKEYS,
+  hotkeysFor,
   SUGGEST_CHANGE_HOTKEYS,
   SUGGEST_DELETION_HOTKEYS,
 } from './hotkeys';
@@ -144,16 +145,38 @@ describe('no binding answers a key it has no business with', () => {
   });
 });
 
-// Recorded rather than lamented. compileModifiers turns 'Mod' into 'Ctrl' off
-// macOS, so ['Mod','Ctrl'] becomes 'Ctrl,Ctrl' — and getModifiers pushes 'Ctrl'
-// once, so no keystroke can ever produce that string. A Windows or Linux writer
-// records their own binding in Settings → Hotkeys; the README says so.
-describe('the known limit of a ⌃⌘ binding', () => {
-  it('cannot fire off macOS, where Mod and Ctrl are the same key', () => {
+// compileModifiers turns 'Mod' into 'Ctrl' off macOS, so ['Mod','Ctrl'] becomes
+// 'Ctrl,Ctrl' — and getModifiers pushes 'Ctrl' once, so no keystroke can ever
+// produce that string. hotkeysFor swaps the pair for Ctrl+Alt there.
+describe('off macOS', () => {
+  it('the macOS pair cannot fire, which is why hotkeysFor exists', () => {
     expect(fires(SUGGEST_DELETION_HOTKEYS, press(['Ctrl'], 189, '-', false), false)).toBe(
       false
     );
-    expect(fires(COMMENT_HOTKEYS, press(['Ctrl'], 77, 'm', false), false)).toBe(false);
     expect(compileModifiers(['Mod', 'Ctrl'], false)).toBe('Ctrl,Ctrl');
+  });
+
+  const win = (hk: Parameters<typeof hotkeysFor>[0]) => hotkeysFor(hk, false);
+  const ctrlAlt = (which: number, char: string) => press(['Ctrl', 'Alt'], which, char, false);
+
+  it('fires on Ctrl+Alt with a US layout', () => {
+    expect(fires(win(SUGGEST_DELETION_HOTKEYS), ctrlAlt(189, '-'), false)).toBe(true);
+    expect(fires(win(SUGGEST_CHANGE_HOTKEYS), ctrlAlt(187, '='), false)).toBe(true);
+    expect(fires(win(COMMENT_HOTKEYS), ctrlAlt(77, 'm'), false)).toBe(true);
+  });
+
+  it('fires on Ctrl+Alt with a German layout', () => {
+    expect(fires(win(SUGGEST_DELETION_HOTKEYS), ctrlAlt(191, '-'), false)).toBe(true);
+    expect(fires(win(SUGGEST_CHANGE_HOTKEYS), ctrlAlt(221, '+'), false)).toBe(true);
+  });
+
+  it('does not answer plain Ctrl, which is Zoom out and friends', () => {
+    expect(fires(win(SUGGEST_DELETION_HOTKEYS), press(['Ctrl'], 189, '-', false), false)).toBe(
+      false
+    );
+  });
+
+  it('leaves the macOS bindings alone', () => {
+    expect(hotkeysFor(COMMENT_HOTKEYS, true)).toBe(COMMENT_HOTKEYS);
   });
 });
