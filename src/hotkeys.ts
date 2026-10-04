@@ -26,14 +26,14 @@ import type { Hotkey } from 'obsidian';
  * plus one more entry, because a US board reaches `+` only over the `=` key,
  * which types `=` when no Shift is held.
  *
- * **What this does not cover.** `compileModifiers` rewrites `Mod` to `Ctrl` off
- * macOS, so `['Mod','Ctrl']` becomes the string `Ctrl,Ctrl` there — and no
- * keystroke can produce that, because an event reports Ctrl once. These are macOS
- * bindings. A writer on Windows or Linux, or on a layout that reaches these keys
- * some third way, records their own in Settings → Hotkeys, which overrides
- * everything here. hotkeys.test.ts pins that limit rather than leaving it to be
- * rediscovered. A letter key needs no list: `M` is `M` on every layout this
- * plugin has any business guessing about.
+ * **Off macOS.** `compileModifiers` rewrites `Mod` to `Ctrl` there, so
+ * `['Mod','Ctrl']` becomes the string `Ctrl,Ctrl` — and no keystroke can produce
+ * that, because an event reports Ctrl once. `hotkeysFor` therefore swaps the pair
+ * for Ctrl+Alt, the same two-modifier shape without the ⌘ it has no key for.
+ * Ctrl+Alt is AltGr on many Windows layouts, so a board that types characters
+ * with AltGr may swallow one of these; Settings → Hotkeys overrides everything
+ * here. A letter key needs no list: `M` is `M` on every layout this plugin has
+ * any business guessing about.
  */
 
 export const COMMENT_HOTKEYS: Hotkey[] = [{ modifiers: ['Mod', 'Ctrl'], key: 'm' }];
@@ -46,3 +46,9 @@ export const SUGGEST_CHANGE_HOTKEYS: Hotkey[] = [
   { modifiers: ['Mod', 'Ctrl'], key: '+' }, // German: the character
   { modifiers: ['Mod', 'Ctrl'], key: '=' }, // US: that key types '=' unshifted
 ];
+
+/** The bindings that can fire on this platform. `mac` is Obsidian's `Platform.isMacOS`. */
+export function hotkeysFor(hotkeys: Hotkey[], mac: boolean): Hotkey[] {
+  if (mac) return hotkeys;
+  return hotkeys.map((h) => ({ ...h, modifiers: ['Ctrl', 'Alt'] }));
+}
